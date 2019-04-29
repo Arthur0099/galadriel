@@ -3,14 +3,41 @@ package pgc
 import (
 	"crypto/ecdsa"
 	"crypto/rand"
-	"log"
 	"math/big"
 )
+
+// CTEncPoint respresents encrypted ct tx point on curve.
+type CTEncPoint struct {
+	X, Y *ecdsa.PublicKey
+}
 
 // TwistedELGamalCT respresents a encrypted transaction encoded in twisted-elgamal format.
 type TwistedELGamalCT struct {
 	// X, Y
-	X, Y *ecdsa.PublicKey
+	CTEncPoint
+	// Random number used in encryption.
+	R *big.Int
+	// encrypted msg.
+	EncMsg []byte
+}
+
+// CopyPublicPoint copys public encrypted ec point.
+func (ct *TwistedELGamalCT) CopyPublicPoint() *CTEncPoint {
+	ecPoints := CTEncPoint{}
+
+	x := new(ecdsa.PublicKey)
+	x.X = ct.X.X
+	x.Y = ct.X.Y
+	x.Curve = ct.X.Curve
+
+	y := new(ecdsa.PublicKey)
+	y.X = ct.Y.X
+	y.Y = ct.Y.Y
+	y.Curve = ct.X.Curve
+
+	ecPoints.X = x
+	ecPoints.Y = y
+	return &ecPoints
 }
 
 // GenerateKey generates key pair using btcec s256 curve.
@@ -36,6 +63,10 @@ func Encrypt(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
 	if err != nil {
 		return nil, err
 	}
+	// for sigma proof purpose.
+	ct.R = new(big.Int).Set(r)
+	ct.EncMsg = make([]byte, len(msg))
+	copy(ct.EncMsg, msg)
 
 	// compute pk * r.(pk ^ r)
 	ct.X.X, ct.X.Y = curve.ScalarMult(pk.X, pk.Y, r.Bytes())
@@ -44,7 +75,6 @@ func Encrypt(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
 	// compute h * m.(h ^ m)
 	pubParams := Params()
 	s2X, s2Y := curve.ScalarMult(pubParams.ElgGenerator.X, pubParams.ElgGenerator.Y, msg)
-	log.Printf("encrypt encoded msg x %x, y %x\n", s2X, s2Y)
 	// compute g * r + h * m.
 	ct.Y.X, ct.Y.Y = curve.Add(s1X, s1Y, s2X, s2Y)
 
@@ -62,7 +92,7 @@ func Decrypt(sk *ecdsa.PrivateKey, ct *TwistedELGamalCT) []byte {
 	// use ct.Y - ct.X Point to get encoded msg.
 	// get Affine negation formulas of ct.Y.
 	encodedMsg := SubECPoint(ct.Y, ct.X)
-	log.Printf("decrypt encoded msg x %x, y %x\n", encodedMsg.X, encodedMsg.Y)
+	_ = encodedMsg
 
 	// todo: decrypt encoded msg.
 	return []byte{}
