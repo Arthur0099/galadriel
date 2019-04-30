@@ -121,40 +121,28 @@ func SigmaFiatShamir(A1, A2, B1, B2 *ecdsa.PublicKey) (*big.Int, error) {
 	// todo: same with Keccak256(a1, a2, b1, b2) in solidity.
 	// use abi.Arguments.Pack(A1, A2, B1, B2)
 	// hash(bytes)
+	return sigmaFiatShamir(A1.X, A1.Y, A2.X, A2.Y, B1.X, B1.Y, B2.X, B2.Y)
+}
+
+// sigmaFiatShamir returns result of hash(pack(data))
+// The type of data must be big.Int
+// todo: check type of data is big.Int
+func sigmaFiatShamir(data ...interface{}) (*big.Int, error) {
 	uint256Type, _ := abi.NewType("uint256", nil)
-	arguments := abi.Arguments{
-		{
-			Type: uint256Type,
-		},
-		{
-			Type: uint256Type,
-		},
-		{
-			Type: uint256Type,
-		},
-		{
-			Type: uint256Type,
-		},
-		{
-			Type: uint256Type,
-		},
-		{
-			Type: uint256Type,
-		},
-		{
-			Type: uint256Type,
-		},
-		{
-			Type: uint256Type,
-		},
+	arguments := make(abi.Arguments, 0)
+	for i := 0; i < len(data); i++ {
+		argument := abi.Argument{}
+		argument.Type = uint256Type
+
+		arguments = append(arguments, argument)
 	}
 
-	data, err := arguments.Pack(A1.X, A1.Y, A2.X, A2.Y, B1.X, B1.Y, B2.X, B2.Y)
+	packedData, err := arguments.Pack(data...)
 	if err != nil {
 		return nil, err
 	}
 
-	return new(big.Int).SetBytes(Keccak256(data)), nil
+	return new(big.Int).SetBytes(Keccak256(packedData)), nil
 }
 
 func VerifySigmaProof(proof *SigmaProof) bool {
@@ -215,6 +203,113 @@ func checkSigmaStep2(h, B, Y *ecdsa.PublicKey, za, zb, e *big.Int) bool {
 	dstX, dstY = curve.Add(B.X, B.Y, dstX, dstY)
 	if dstX.Cmp(checkX) != 0 || dstY.Cmp(checkY) != 0 {
 		log.Printf("g*z + h*z' (x %x, y %x) != B + Y * e(x %x, y %x)\n", checkX, checkY, dstX, dstY)
+		return false
+	}
+
+	return true
+}
+
+// DLESigmaProver holds method to prove two ciphertexts encrypt the same value under same public key.
+type DLESigmaProver struct {
+	//
+}
+
+// DLESigmaProof includes items of zero-knowledge proof.
+type DLESigmaProof struct {
+	A1, A2 *ecdsa.PublicKey
+
+	Z *big.Int
+
+	g1, h1, g2, h2 *ecdsa.PublicKey
+}
+
+// GenerateProof generates zero knowledge proof to prove two ciphertexts encrypt the same value under same public key.
+func (dleProver *DLESigmaProver) GenerateProof(ori, refresh *TwistedELGamalCT, sk *ecdsa.PrivateKey) (*DLESigmaProof, error) {
+	// g1 = Y(fresh) - Y(ori)
+	g1 := SubECPoint(refresh.Y, ori.Y)
+	// h1 = X(fresh) - X(ori)
+	h1 := SubECPoint(refresh.X, ori.X)
+	// g2 = G base point.
+	g2 := PointToPublicKey(sk.Curve.Params().Gx, sk.Curve.Params().Gy, sk.Curve)
+	// h2 = pk.
+	h2 := &sk.PublicKey
+	// witness = sk.
+	w := new(big.Int).Set(sk.D)
+	return dleProver.generateProof(g1, h1, g2, h2, w)
+}
+
+// generateProof generates items to prove g1 ^ w == h1; g2 ^ w == h2; w==w.
+func (dleProver *DLESigmaProver) generateProof(g1, h1, g2, h2 *ecdsa.PublicKey, w *big.Int) (*DLESigmaProof, error) {
+	//
+	curve := g1.Curve
+	n := curve.Params().N
+	a, err := rand.Int(rand.Reader, n)
+	if err != nil {
+		return nil, err
+	}
+
+	A1X, A1Y := curve.ScalarMult(g1.X, g1.Y, a.Bytes())
+	A2X, A2Y := curve.ScalarMult(g2.X, g2.Y, a.Bytes())
+	// compute challenge e.
+	e, err := sigmaFiatShamir(A1X, A1Y, A2X, A2Y)
+	if err != nil {
+		return nil, err
+	}
+
+	// compute z = a + e * w.
+	z := new(big.Int).Mul(e, w)
+	z = z.Mod(z, n)
+	z = z.Add(z, a)
+	z = z.Mod(z, n)
+
+	// set proof
+	proof := new(DLESigmaProof)
+	proof.A1 = PointToPublicKey(A1X, A1Y, curve)
+	proof.A2 = PointToPublicKey(A2X, A2Y, curve)
+	proof.Z = z
+	proof.g1 = g1
+	proof.h1 = h1
+	proof.g2 = g2
+	proof.h2 = h2
+
+	return proof, nil
+}
+
+// VerifyDLESigmaProof verify the proof is valid or not.
+func VerifyDLESigmaProof(proof *DLESigmaProof) bool {
+	curve := proof.A1.Curve
+
+	e, err := sigmaFiatShamir(proof.A1.X, proof.A1.Y, proof.A2.X, proof.A2.Y)
+	if err != nil {
+		return false
+	}
+
+	if e.Cmp(curve.Params().N) >= 0 {
+		log.Printf("challenge e out of bound\n")
+		return false
+	}
+
+	// check g1 * z == A1 + h1 * e.
+	if !checkDLESigmaProof(proof.g1, proof.A1, proof.h1, proof.Z, e) {
+		return false
+	}
+	// check g2 * z == A2 + h2 * e.
+	if !checkDLESigmaProof(proof.g2, proof.A2, proof.h2, proof.Z, e) {
+		return false
+	}
+
+	return true
+}
+
+// checkDLESigmaProof checks g * z == A + h * e.
+func checkDLESigmaProof(g, A, H *ecdsa.PublicKey, z, e *big.Int) bool {
+	curve := g.Curve
+	checkX, checkY := curve.ScalarMult(g.X, g.Y, z.Bytes())
+	dstX, dstY := curve.ScalarMult(H.X, H.Y, e.Bytes())
+	dstX, dstY = curve.Add(A.X, A.Y, dstX, dstY)
+
+	if dstX.Cmp(checkX) != 0 || dstY.Cmp(checkY) != 0 {
+		log.Printf("g * z(x %x, y %x) != A + h * e(x %x, y %x)\n", checkX, checkY, dstX, dstY)
 		return false
 	}
 

@@ -65,3 +65,57 @@ func TestSigmaProtocol(t *testing.T) {
 	}
 
 }
+
+func TestDLESigmaProof(t *testing.T) {
+	key, err := GenerateKey()
+	if err != nil {
+		t.Error("key generation failed")
+		return
+	}
+
+	tests := []struct {
+		MsgA   []byte
+		MsgB   []byte
+		Expect bool
+	}{
+		{
+			MsgA:   []byte("dlesigmaproof"),
+			MsgB:   []byte("dlesigmaproof"),
+			Expect: true,
+		},
+		{
+			MsgA:   []byte("sss"),
+			MsgB:   []byte("ccc"),
+			Expect: false,
+		},
+	}
+
+	for i, test := range tests {
+		ct1, err := Encrypt(&key.PublicKey, test.MsgA)
+		if err != nil {
+			t.Error("encrypt failed")
+			return
+		}
+		ct2, err := Encrypt(&key.PublicKey, test.MsgB)
+		if err != nil {
+			t.Error("encrypt failed")
+			return
+		}
+		if ct1.X.X.Cmp(ct2.X.X) == 0 {
+			t.Error("random number is the same in two randmon")
+			return
+		}
+
+		prover := DLESigmaProver{}
+		proof, err := prover.GenerateProof(ct1, ct2, key)
+		if err != nil {
+			t.Error("generate proof failed")
+			return
+		}
+
+		if VerifyDLESigmaProof(proof) != test.Expect {
+			t.Error(i, "dlesigma proof verify except %v, actual %c", test.Expect, !test.Expect)
+		}
+	}
+
+}
