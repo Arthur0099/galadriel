@@ -1,20 +1,20 @@
 package pgc
 
 import (
-	"crypto/ecdsa"
 	"math/big"
 )
 
 // PublicParams includes global public params used in PGC and bullet proof.
 type PublicParams struct {
 	// pgc public params.
-	ElgGenerator *ecdsa.PublicKey
+	ElgGenerator *ECPoint
 
 	// bullet proof params.
 }
 
 var params PublicParams
 
+// Params returns public params used in protocol.
 func Params() *PublicParams {
 	return &params
 }
@@ -30,8 +30,6 @@ func init() {
 		panic("h generator is bigger than N in curve")
 	}
 
-	elgGenerator := new(ecdsa.PublicKey)
-	elgGenerator.Curve = curve
-	elgGenerator.X, elgGenerator.Y = curve.ScalarBaseMult(h)
-	params.ElgGenerator = elgGenerator
+	x, y := curve.ScalarBaseMult(h)
+	params.ElgGenerator = NewECPoint(x, y, curve)
 }

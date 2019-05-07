@@ -1,23 +1,23 @@
 package pgc
 
 import (
-	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"fmt"
-	"log"
 	"math/big"
+
+	log "github.com/inconshreveable/log15"
 )
 
 // GeneratorVector respresents ecpoints generatorvector used in bulletproof.
 type GeneratorVector struct {
 	// ecpoints as vector.
-	vector []*ecdsa.PublicKey
+	vector []*ECPoint
 }
 
 // NewGeneratorVector creates GeneratorVector instance.
 // Warning: change to original vector will also change vector in GeneratorVector.
-func NewGeneratorVector(ecPoints []*ecdsa.PublicKey) *GeneratorVector {
+func NewGeneratorVector(ecPoints []*ECPoint) *GeneratorVector {
 	g := GeneratorVector{}
 	g.vector = ecPoints
 
@@ -29,7 +29,7 @@ func NewGeneratorVector(ecPoints []*ecdsa.PublicKey) *GeneratorVector {
 func NewRandomGeneratorVector(curve elliptic.Curve, n int) *GeneratorVector {
 	g := GeneratorVector{}
 	order := curve.Params().N
-	g.vector = make([]*ecdsa.PublicKey, 0)
+	g.vector = make([]*ECPoint, 0)
 
 	for i := 0; i < n; i++ {
 		tmp, err := rand.Int(rand.Reader, order)
@@ -39,7 +39,7 @@ func NewRandomGeneratorVector(curve elliptic.Curve, n int) *GeneratorVector {
 		}
 
 		x, y := curve.ScalarBaseMult(tmp.Bytes())
-		g.vector = append(g.vector, PointToPublicKey(x, y, curve))
+		g.vector = append(g.vector, NewECPoint(x, y, curve))
 	}
 
 	return &g
@@ -67,9 +67,9 @@ func (gv *GeneratorVector) SubVector(start, end int) *GeneratorVector {
 		panic(fmt.Sprintf("vector index start %d, end %d out of range", start, end))
 	}
 
-	newVector := make([]*ecdsa.PublicKey, 0)
+	newVector := make([]*ECPoint, 0)
 	for _, point := range gv.vector[start:end] {
-		newVector = append(newVector, PointToPublicKey(point.X, point.Y, point.Curve))
+		newVector = append(newVector, NewECPoint(point.X, point.Y, point.Curve))
 	}
 
 	return NewGeneratorVector(newVector)
@@ -81,19 +81,16 @@ func (gv *GeneratorVector) Copy() *GeneratorVector {
 }
 
 // Commit computes res = gi * ai + ... + gn * an.
-func (gv *GeneratorVector) Commit(a []*big.Int) *ecdsa.PublicKey {
+func (gv *GeneratorVector) Commit(a []*big.Int) *ECPoint {
 	if len(gv.vector) != len(a) {
 		panic(fmt.Sprintf("vector len %d != field vector len %d", len(gv.vector), len(a)))
 	}
 
 	// compute res.
-	res := new(ecdsa.PublicKey)
-	first := gv.vector[0]
-	res.Curve = first.Curve
-	res.X, res.Y = res.Curve.ScalarMult(first.X, first.Y, a[0].Bytes())
+	res := new(ECPoint).ScalarMult(gv.vector[0], a[0])
 	for i := 1; i < len(a); i++ {
-		cX, cY := res.Curve.ScalarMult(gv.vector[i].X, gv.vector[i].Y, a[i].Bytes())
-		res.X, res.Y = res.Curve.Add(res.X, res.Y, cX, cY)
+		tmpP := new(ECPoint).ScalarMult(gv.vector[i], a[i])
+		res.Add(res, tmpP)
 	}
 
 	return res
@@ -101,18 +98,17 @@ func (gv *GeneratorVector) Commit(a []*big.Int) *ecdsa.PublicKey {
 
 // Hadamard computes gi * x + ... + gn * x.
 func (gv *GeneratorVector) Hadamard(x *big.Int) *GeneratorVector {
-	curve := gv.vector[0].Curve
-	newVector := make([]*ecdsa.PublicKey, 0)
+	newVector := make([]*ECPoint, 0)
 	for _, point := range gv.vector {
-		px, py := curve.ScalarMult(point.X, point.Y, x.Bytes())
-		newVector = append(newVector, PointToPublicKey(px, py, curve))
+		p := new(ECPoint).ScalarMult(point, x)
+		newVector = append(newVector, p)
 	}
 
 	return NewGeneratorVector(newVector)
 }
 
 // Get returns point by index.
-func (gv *GeneratorVector) Get(i int) *ecdsa.PublicKey {
+func (gv *GeneratorVector) Get(i int) *ECPoint {
 	return gv.vector[i]
 }
 
@@ -122,15 +118,12 @@ func (gv *GeneratorVector) AddGeneratorVector(other *GeneratorVector) *Generator
 		panic(fmt.Sprintf("two generator vector size not equal %d != %d", gv.Size(), other.Size()))
 	}
 
-	curve := gv.vector[0].Curve
-
 	// add vector.
-
-	newVector := make([]*ecdsa.PublicKey, 0)
+	newVector := make([]*ECPoint, 0)
 	for i, point := range gv.vector {
 		otherPoint := other.Get(i)
-		x, y := curve.Add(point.X, point.Y, otherPoint.X, otherPoint.Y)
-		newVector = append(newVector, PointToPublicKey(x, y, curve))
+		newP := new(ECPoint).Add(point, otherPoint)
+		newVector = append(newVector, newP)
 	}
 
 	return NewGeneratorVector(newVector)
@@ -139,6 +132,6 @@ func (gv *GeneratorVector) AddGeneratorVector(other *GeneratorVector) *Generator
 // Print print all info of generator vector(test purpose)
 func (gv *GeneratorVector) Print() {
 	for i, p := range gv.vector {
-		log.Printf("%d vector x %x, y %x", i, p.X, p.Y)
+		log.Debug("generator vector", "index", i, "x", p.X, "y", p.Y)
 	}
 }

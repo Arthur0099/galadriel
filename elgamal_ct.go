@@ -4,11 +4,13 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"math/big"
+
+	log "github.com/inconshreveable/log15"
 )
 
 // CTEncPoint respresents encrypted ct tx point on curve.
 type CTEncPoint struct {
-	X, Y *ecdsa.PublicKey
+	X, Y *ECPoint
 }
 
 // TwistedELGamalCT respresents a encrypted transaction encoded in twisted-elgamal format.
@@ -25,18 +27,8 @@ type TwistedELGamalCT struct {
 func (ct *TwistedELGamalCT) CopyPublicPoint() *CTEncPoint {
 	ecPoints := CTEncPoint{}
 
-	x := new(ecdsa.PublicKey)
-	x.X = ct.X.X
-	x.Y = ct.X.Y
-	x.Curve = ct.X.Curve
-
-	y := new(ecdsa.PublicKey)
-	y.X = ct.Y.X
-	y.Y = ct.Y.Y
-	y.Curve = ct.X.Curve
-
-	ecPoints.X = x
-	ecPoints.Y = y
+	ecPoints.X = ct.X.Copy()
+	ecPoints.Y = ct.Y.Copy()
 	return &ecPoints
 }
 
@@ -50,13 +42,11 @@ func GenerateKey() (key *ecdsa.PrivateKey, err error) {
 func Encrypt(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
 	// Create ct instance.
 	ct := new(TwistedELGamalCT)
-	ct.X = new(ecdsa.PublicKey)
-	ct.Y = new(ecdsa.PublicKey)
+	ct.X = NewEmptyECPoint(pk.Curve)
+	ct.Y = NewEmptyECPoint(pk.Curve)
 
 	// set curve
 	curve := pk.Curve
-	ct.X.Curve = curve
-	ct.Y.Curve = curve
 
 	// get random.
 	r, err := rand.Int(rand.Reader, curve.Params().N)
@@ -69,14 +59,17 @@ func Encrypt(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
 	copy(ct.EncMsg, msg)
 
 	// compute pk * r.(pk ^ r)
-	ct.X.X, ct.X.Y = curve.ScalarMult(pk.X, pk.Y, r.Bytes())
+	ct.X.SetFromPublicKey(pk)
+	ct.X.ScalarMult(ct.X, r)
 	// compute g * r.(g ^ r)
-	s1X, s1Y := curve.ScalarBaseMult(r.Bytes())
+	ct.Y.ScalarBaseMult(r)
 	// compute h * m.(h ^ m)
 	pubParams := Params()
 	s2X, s2Y := curve.ScalarMult(pubParams.ElgGenerator.X, pubParams.ElgGenerator.Y, msg)
+	log.Debug("encrypt msg(h^m)", "x", s2X, "y", s2Y)
+
 	// compute g * r + h * m.
-	ct.Y.X, ct.Y.Y = curve.Add(s1X, s1Y, s2X, s2Y)
+	ct.Y.Add(ct.Y, NewECPoint(s2X, s2Y, curve))
 
 	return ct, nil
 }
@@ -88,10 +81,11 @@ func Decrypt(sk *ecdsa.PrivateKey, ct *TwistedELGamalCT) []byte {
 	// compute the inverse of sk.
 	skInverse := new(big.Int).ModInverse(sk.D, curve.Params().N)
 	// compute X * skInverse(X ^ skInverse) == g * r.
-	ct.X.X, ct.X.Y = curve.ScalarMult(ct.X.X, ct.X.Y, skInverse.Bytes())
+	ct.X.ScalarMult(ct.X, skInverse)
 	// use ct.Y - ct.X Point to get encoded msg.
 	// get Affine negation formulas of ct.Y.
-	encodedMsg := SubECPoint(ct.Y, ct.X)
+	encodedMsg := ct.Y.Sub(ct.Y, ct.X)
+	log.Debug("decrypt msg(h^m)", "x", encodedMsg.X, "y", encodedMsg.Y)
 	_ = encodedMsg
 
 	// todo: decrypt encoded msg.

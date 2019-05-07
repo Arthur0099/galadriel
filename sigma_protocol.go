@@ -5,22 +5,22 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"errors"
-	"log"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
+	log "github.com/inconshreveable/log15"
 )
 
 // SigmaProof includes items to prove two encryption of same message under two different public key.
 type SigmaProof struct {
 	//
 	z1, z2, z3     *big.Int
-	Pk1, Pk2       *ecdsa.PublicKey
-	A1, A2, B1, B2 *ecdsa.PublicKey
+	Pk1, Pk2       *ECPoint
+	A1, A2, B1, B2 *ECPoint
 	// encrypt ct point.
 	ct1, ct2 *CTEncPoint
 }
 
+// SigmaProver .
 type SigmaProver struct {
 	// TestFlag means generation is for a test purpose(if set true).
 	TestFlag bool
@@ -55,28 +55,23 @@ func (prover *SigmaProver) GenerateProof(pk1, pk2 *ecdsa.PublicKey, ct1, ct2 *Tw
 
 	// compute proof.
 	h := Params().ElgGenerator
-	A1X, A1Y := curve.ScalarMult(pk1.X, pk1.Y, a1.Bytes())
-	A1 := PointToPublicKey(A1X, A1Y, curve)
-	A2X, A2Y := curve.ScalarMult(pk2.X, pk2.Y, a2.Bytes())
-	A2 := PointToPublicKey(A2X, A2Y, curve)
+	//
+	A1 := new(ECPoint).SetFromPublicKey(pk1)
+	A1.ScalarMult(A1, a1)
+	A2 := new(ECPoint).SetFromPublicKey(pk2)
+	A2.ScalarMult(A2, a2)
+
 	// compute g * a1 + h * b
-	hbX, hbY := curve.ScalarMult(h.X, h.Y, b.Bytes())
-	b1X, b1Y := curve.ScalarBaseMult(a1.Bytes())
-	B1X, B1Y := curve.Add(hbX, hbY, b1X, b1Y)
-	B1 := PointToPublicKey(B1X, B1Y, curve)
+	hb := new(ECPoint).ScalarMult(h, b)
+	ga1 := NewEmptyECPoint(curve).ScalarBaseMult(a1)
+	B1 := new(ECPoint).Add(hb, ga1)
 	// compute g * a2 + h * b
-	b2X, b2Y := curve.ScalarBaseMult(a2.Bytes())
-	B2X, B2Y := curve.Add(hbX, hbY, b2X, b2Y)
-	B2 := PointToPublicKey(B2X, B2Y, curve)
+	ga2 := NewEmptyECPoint(curve).ScalarBaseMult(a2)
+	B2 := new(ECPoint).Add(ga2, hb)
 
 	// compute challenge e.
 	e, err := SigmaFiatShamir(A1, A2, B1, B2)
 	if err != nil {
-		return
-	}
-	// make sure e < n.
-	if e.Cmp(n) >= 0 {
-		err = errors.New("challenge e out of bound")
 		return
 	}
 
@@ -102,8 +97,8 @@ func (prover *SigmaProver) GenerateProof(pk1, pk2 *ecdsa.PublicKey, ct1, ct2 *Tw
 	proof.ct1 = ct1.CopyPublicPoint()
 	proof.ct2 = ct2.CopyPublicPoint()
 	// warning: change to proof.pk1 will alse change pk1.
-	proof.Pk1 = pk1
-	proof.Pk2 = pk2
+	proof.Pk1 = new(ECPoint).SetFromPublicKey(pk1)
+	proof.Pk2 = new(ECPoint).SetFromPublicKey(pk2)
 	proof.z1 = z1
 	proof.z2 = z2
 	proof.z3 = z3
@@ -117,41 +112,14 @@ func (prover *SigmaProver) GenerateProof(pk1, pk2 *ecdsa.PublicKey, ct1, ct2 *Tw
 
 // SigmaFiatShamir calculate challenge e.
 // Don't change A1, A2, B1, B2
-func SigmaFiatShamir(A1, A2, B1, B2 *ecdsa.PublicKey) (*big.Int, error) {
-	// todo: same with Keccak256(a1, a2, b1, b2) in solidity.
-	// use abi.Arguments.Pack(A1, A2, B1, B2)
-	// hash(bytes)
-	return sigmaFiatShamir(A1.X, A1.Y, A2.X, A2.Y, B1.X, B1.Y, B2.X, B2.Y)
+func SigmaFiatShamir(A1, A2, B1, B2 *ECPoint) (*big.Int, error) {
+	return ComputeChallenge(A1.Curve.Params().N, A1.X, A1.Y, A2.X, A2.Y, B1.X, B1.Y, B2.X, B2.Y)
 }
 
-// sigmaFiatShamir returns result of hash(pack(data))
-// The type of data must be big.Int
-// todo: check type of data is big.Int
-func sigmaFiatShamir(data ...interface{}) (*big.Int, error) {
-	uint256Type, _ := abi.NewType("uint256", nil)
-	arguments := make(abi.Arguments, 0)
-	for i := 0; i < len(data); i++ {
-		argument := abi.Argument{}
-		argument.Type = uint256Type
-
-		arguments = append(arguments, argument)
-	}
-
-	packedData, err := arguments.Pack(data...)
-	if err != nil {
-		return nil, err
-	}
-
-	return new(big.Int).SetBytes(Keccak256(packedData)), nil
-}
-
+// VerifySigmaProof validates proof.
 func VerifySigmaProof(proof *SigmaProof) bool {
 	e, err := SigmaFiatShamir(proof.A1, proof.A2, proof.B1, proof.B2)
 	if err != nil {
-		return false
-	}
-	if e.Cmp(proof.Pk1.Curve.Params().N) >= 0 {
-		log.Printf("challenge e is bigger than N(G point order)")
 		return false
 	}
 	// check pk1 * z1 == A1 + X1 * e.
@@ -178,13 +146,16 @@ func VerifySigmaProof(proof *SigmaProof) bool {
 }
 
 // checkSigmaStep1 checks pk * z == A + X * e or not.
-func checkSigmaStep1(pk, A, X *ecdsa.PublicKey, z, e *big.Int) bool {
-	curve := pk.Curve
-	checkX, checkY := curve.ScalarMult(X.X, X.Y, e.Bytes())
-	dstX, dstY := curve.Add(A.X, A.Y, checkX, checkY)
-	srcX, srcY := curve.ScalarMult(pk.X, pk.Y, z.Bytes())
-	if dstX.Cmp(srcX) != 0 || dstY.Cmp(srcY) != 0 {
-		log.Printf("pk * z(x %x, y %x) != A + X * e(x %x, y %x)\n", srcX, srcY, dstX, dstY)
+func checkSigmaStep1(pk, A, X *ECPoint, z, e *big.Int) bool {
+
+	// compute x * e + A
+	actual := new(ECPoint).ScalarMult(X, e)
+	actual.Add(actual, A)
+	// compute pk * z.
+	expect := new(ECPoint).ScalarMult(pk, z)
+
+	if !expect.Equals(actual) {
+		log.Warn("pk * z != A + X * e", "expect x", expect.X, "expect y", expect.Y, "actual x", actual.X, "actual y", actual.Y)
 		return false
 	}
 
@@ -192,17 +163,16 @@ func checkSigmaStep1(pk, A, X *ecdsa.PublicKey, z, e *big.Int) bool {
 }
 
 // checkSigmaStep2 checks g * z + h * z' == B + Y * e.
-func checkSigmaStep2(h, B, Y *ecdsa.PublicKey, za, zb, e *big.Int) bool {
-	curve := h.Curve
+func checkSigmaStep2(h, B, Y *ECPoint, za, zb, e *big.Int) bool {
 	// compute g * za + h * zb.
-	checkX, checkY := curve.ScalarBaseMult(za.Bytes())
-	hX, hY := curve.ScalarMult(h.X, h.Y, zb.Bytes())
-	checkX, checkY = curve.Add(checkX, checkY, hX, hY)
+	gza := NewEmptyECPoint(h.Curve).ScalarBaseMult(za)
+	hzb := new(ECPoint).ScalarMult(h, zb)
+	actual := new(ECPoint).Add(gza, hzb)
 	// compute B + Y * e.
-	dstX, dstY := curve.ScalarMult(Y.X, Y.Y, e.Bytes())
-	dstX, dstY = curve.Add(B.X, B.Y, dstX, dstY)
-	if dstX.Cmp(checkX) != 0 || dstY.Cmp(checkY) != 0 {
-		log.Printf("g*z + h*z' (x %x, y %x) != B + Y * e(x %x, y %x)\n", checkX, checkY, dstX, dstY)
+	ye := new(ECPoint).ScalarMult(Y, e)
+	expect := new(ECPoint).Add(ye, B)
+	if !expect.Equals(actual) {
+		log.Warn("g * z + h * z' != B + Y * e", "expect x", expect.X, "expect y", expect.Y, "actual x", actual.X, "actual y", actual.Y)
 		return false
 	}
 
@@ -216,30 +186,30 @@ type DLESigmaProver struct {
 
 // DLESigmaProof includes items of zero-knowledge proof.
 type DLESigmaProof struct {
-	A1, A2 *ecdsa.PublicKey
+	A1, A2 *ECPoint
 
 	Z *big.Int
 
-	g1, h1, g2, h2 *ecdsa.PublicKey
+	g1, h1, g2, h2 *ECPoint
 }
 
 // GenerateProof generates zero knowledge proof to prove two ciphertexts encrypt the same value under same public key.
 func (dleProver *DLESigmaProver) GenerateProof(ori, refresh *TwistedELGamalCT, sk *ecdsa.PrivateKey) (*DLESigmaProof, error) {
 	// g1 = Y(fresh) - Y(ori)
-	g1 := SubECPoint(refresh.Y, ori.Y)
+	g1 := new(ECPoint).Sub(refresh.Y, ori.Y)
 	// h1 = X(fresh) - X(ori)
-	h1 := SubECPoint(refresh.X, ori.X)
+	h1 := new(ECPoint).Sub(refresh.X, ori.X)
 	// g2 = G base point.
-	g2 := PointToPublicKey(sk.Curve.Params().Gx, sk.Curve.Params().Gy, sk.Curve)
+	g2 := NewECPoint(sk.Curve.Params().Gx, sk.Curve.Params().Gy, sk.Curve)
 	// h2 = pk.
-	h2 := &sk.PublicKey
+	h2 := new(ECPoint).SetFromPublicKey(&sk.PublicKey)
 	// witness = sk.
 	w := new(big.Int).Set(sk.D)
 	return dleProver.generateProof(g1, h1, g2, h2, w)
 }
 
 // generateProof generates items to prove g1 ^ w == h1; g2 ^ w == h2; w==w.
-func (dleProver *DLESigmaProver) generateProof(g1, h1, g2, h2 *ecdsa.PublicKey, w *big.Int) (*DLESigmaProof, error) {
+func (dleProver *DLESigmaProver) generateProof(g1, h1, g2, h2 *ECPoint, w *big.Int) (*DLESigmaProof, error) {
 	//
 	curve := g1.Curve
 	n := curve.Params().N
@@ -248,10 +218,11 @@ func (dleProver *DLESigmaProver) generateProof(g1, h1, g2, h2 *ecdsa.PublicKey, 
 		return nil, err
 	}
 
-	A1X, A1Y := curve.ScalarMult(g1.X, g1.Y, a.Bytes())
-	A2X, A2Y := curve.ScalarMult(g2.X, g2.Y, a.Bytes())
+	// A1 = g1 * a; A2 = g2 * a;
+	A1 := new(ECPoint).ScalarMult(g1, a)
+	A2 := new(ECPoint).ScalarMult(g2, a)
 	// compute challenge e.
-	e, err := sigmaFiatShamir(A1X, A1Y, A2X, A2Y)
+	e, err := ComputeChallenge(n, A1.X, A1.Y, A2.X, A2.Y)
 	if err != nil {
 		return nil, err
 	}
@@ -264,8 +235,8 @@ func (dleProver *DLESigmaProver) generateProof(g1, h1, g2, h2 *ecdsa.PublicKey, 
 
 	// set proof
 	proof := new(DLESigmaProof)
-	proof.A1 = PointToPublicKey(A1X, A1Y, curve)
-	proof.A2 = PointToPublicKey(A2X, A2Y, curve)
+	proof.A1 = A1
+	proof.A2 = A2
 	proof.Z = z
 	proof.g1 = g1
 	proof.h1 = h1
@@ -279,13 +250,8 @@ func (dleProver *DLESigmaProver) generateProof(g1, h1, g2, h2 *ecdsa.PublicKey, 
 func VerifyDLESigmaProof(proof *DLESigmaProof) bool {
 	curve := proof.A1.Curve
 
-	e, err := sigmaFiatShamir(proof.A1.X, proof.A1.Y, proof.A2.X, proof.A2.Y)
+	e, err := ComputeChallenge(curve.Params().N, proof.A1.X, proof.A1.Y, proof.A2.X, proof.A2.Y)
 	if err != nil {
-		return false
-	}
-
-	if e.Cmp(curve.Params().N) >= 0 {
-		log.Printf("challenge e out of bound\n")
 		return false
 	}
 
@@ -302,14 +268,15 @@ func VerifyDLESigmaProof(proof *DLESigmaProof) bool {
 }
 
 // checkDLESigmaProof checks g * z == A + h * e.
-func checkDLESigmaProof(g, A, H *ecdsa.PublicKey, z, e *big.Int) bool {
-	curve := g.Curve
-	checkX, checkY := curve.ScalarMult(g.X, g.Y, z.Bytes())
-	dstX, dstY := curve.ScalarMult(H.X, H.Y, e.Bytes())
-	dstX, dstY = curve.Add(A.X, A.Y, dstX, dstY)
+func checkDLESigmaProof(g, A, H *ECPoint, z, e *big.Int) bool {
+	// g * z.
+	gz := new(ECPoint).ScalarMult(g, z)
+	// h * e + A.
+	he := new(ECPoint).ScalarMult(H, e)
+	expect := new(ECPoint).Add(A, he)
 
-	if dstX.Cmp(checkX) != 0 || dstY.Cmp(checkY) != 0 {
-		log.Printf("g * z(x %x, y %x) != A + h * e(x %x, y %x)\n", checkX, checkY, dstX, dstY)
+	if !expect.Equals(gz) {
+		log.Warn("g * z != A + h * e", "expect x", expect.X, "expect y", expect.Y, "actual x", gz.X, "actual y", gz.Y)
 		return false
 	}
 

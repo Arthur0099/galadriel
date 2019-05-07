@@ -19,12 +19,11 @@ func TestInnerProductProtocol(t *testing.T) {
 	c := a.InnerProduct(b)
 	pa := g.Commit(a.GetVector())
 	pb := h.Commit(b.GetVector())
-	px, py := curve.Add(pa.X, pa.Y, pb.X, pb.Y)
-	p := PointToPublicKey(px, py, curve)
+	p := new(ECPoint).Add(pa, pb)
 
 	random := new(big.Int).SetUint64(1000)
 	ux, uy := curve.ScalarBaseMult(random.Bytes())
-	u := PointToPublicKey(ux, uy, curve)
+	u := NewECPoint(ux, uy, curve)
 
 	prover := IPProver{}
 	prover.U = u
