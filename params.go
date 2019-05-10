@@ -9,6 +9,9 @@ type PublicParams struct {
 	// pgc public params.
 	ElgGenerator *ECPoint
 
+	//
+	G *ECPoint
+
 	// bullet proof params.
 }
 

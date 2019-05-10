@@ -31,8 +31,10 @@ type IPProver struct {
 	U *ECPoint
 }
 
-// GenerateIPProof generates proof using protocol 1 in bulletproof inner-product argument.
-// p = g * a + h * b; c = <a, b>
+// GenerateIPProof generates proof using protocol 1 in bulletproof inner-product argument to prove that
+// prover knows two vector a, b and p = g * a + h *b; and c = <a, b>;
+// the g, h, p, h is public known by verifier.
+// g and h are generator vectors.
 func (ipProver *IPProver) GenerateIPProof(g, h *GeneratorVector, p *ECPoint, c *big.Int, a, b *FieldVector) (*IPProof, error) {
 	if !(g.Size() == h.Size() && h.Size() == a.Size() && a.Size() == b.Size()) {
 		return nil, errors.New("g, h, a, b size not equal")
@@ -110,8 +112,8 @@ func (ipProver *IPProver) generateIPProof(g, h *GeneratorVector, u, p *ECPoint, 
 	}
 	eInverse := new(big.Int).ModInverse(e, n)
 
-	gPrime := gLeft.Hadamard(eInverse).AddGeneratorVector(gRight.Hadamard(e))
-	hPrime := hLeft.Hadamard(e).AddGeneratorVector(hRight.Hadamard(eInverse))
+	gPrime := gLeft.HadamardScalar(eInverse).AddGeneratorVector(gRight.HadamardScalar(e))
+	hPrime := hLeft.HadamardScalar(e).AddGeneratorVector(hRight.HadamardScalar(eInverse))
 
 	aPrime := aLeft.Times(e).AddFieldVector(aRight.Times(eInverse))
 	bPrime := bLeft.Times(eInverse).AddFieldVector(bRight.Times(e))
@@ -179,8 +181,8 @@ func (ipVerifier *IPVerifier) verifyIPProof(g, h *GeneratorVector, u, p *ECPoint
 
 		eInverse := new(big.Int).ModInverse(e, n)
 
-		gPrime := gLeft.Hadamard(eInverse).AddGeneratorVector(gRight.Hadamard(e))
-		hPrime := hLeft.Hadamard(e).AddGeneratorVector(hRight.Hadamard(eInverse))
+		gPrime := gLeft.HadamardScalar(eInverse).AddGeneratorVector(gRight.HadamardScalar(e))
+		hPrime := hLeft.HadamardScalar(e).AddGeneratorVector(hRight.HadamardScalar(eInverse))
 
 		// Compute e ^ 2.
 		eSquare := new(big.Int).Mul(e, e)

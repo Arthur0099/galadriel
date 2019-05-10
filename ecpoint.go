@@ -3,6 +3,7 @@ package pgc
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/rand"
 	"math/big"
 )
 
@@ -19,6 +20,18 @@ func NewECPoint(x, y *big.Int, curve elliptic.Curve) *ECPoint {
 	ec.Y = new(big.Int).Set(y)
 
 	return &ec
+}
+
+// NewRandomECPoint creates a ec point by randomness.
+func NewRandomECPoint(curve elliptic.Curve) *ECPoint {
+	h, err := rand.Int(rand.Reader, curve.Params().N)
+	if err != nil {
+		panic(err)
+	}
+
+	hx, hy := curve.ScalarBaseMult(h.Bytes())
+
+	return NewECPoint(hx, hy, curve)
 }
 
 // NewEmptyECPoint creates instance of ec point without x or y point.

@@ -133,7 +133,7 @@ func VerifySigmaProof(proof *SigmaProof) bool {
 	}
 
 	h := Params().ElgGenerator
-	// check g * z1 + h * z3 == B1 + Y1 * e.
+	// Check G * z1 + h * z3 == B1 + Y1 * e.
 	if !checkSigmaStep2(h, proof.B1, proof.ct1.Y, proof.z1, proof.z3, e) {
 		return false
 	}

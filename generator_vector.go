@@ -13,13 +13,18 @@ import (
 type GeneratorVector struct {
 	// ecpoints as vector.
 	vector []*ECPoint
+	// for convinence.
+	Curve elliptic.Curve
 }
 
 // NewGeneratorVector creates GeneratorVector instance.
 // Warning: change to original vector will also change vector in GeneratorVector.
 func NewGeneratorVector(ecPoints []*ECPoint) *GeneratorVector {
 	g := GeneratorVector{}
-	g.vector = ecPoints
+	if len(ecPoints) > 0 {
+		g.vector = ecPoints
+		g.Curve = ecPoints[0].Curve
+	}
 
 	return &g
 }
@@ -30,6 +35,7 @@ func NewRandomGeneratorVector(curve elliptic.Curve, n int) *GeneratorVector {
 	g := GeneratorVector{}
 	order := curve.Params().N
 	g.vector = make([]*ECPoint, 0)
+	g.Curve = curve
 
 	for i := 0; i < n; i++ {
 		tmp, err := rand.Int(rand.Reader, order)
@@ -80,6 +86,17 @@ func (gv *GeneratorVector) Copy() *GeneratorVector {
 	return gv.SubVector(0, len(gv.vector))
 }
 
+// Sum compute gi + ... + gn.
+func (gv *GeneratorVector) Sum() *ECPoint {
+	res := gv.vector[0].Copy()
+
+	for i := 1; i < gv.Size(); i++ {
+		res.Add(res, gv.vector[i])
+	}
+
+	return res
+}
+
 // Commit computes res = gi * ai + ... + gn * an.
 func (gv *GeneratorVector) Commit(a []*big.Int) *ECPoint {
 	if len(gv.vector) != len(a) {
@@ -96,11 +113,27 @@ func (gv *GeneratorVector) Commit(a []*big.Int) *ECPoint {
 	return res
 }
 
-// Hadamard computes gi * x + ... + gn * x.
-func (gv *GeneratorVector) Hadamard(x *big.Int) *GeneratorVector {
+// HadamardScalar computes gi * x + ... + gn * x.
+func (gv *GeneratorVector) HadamardScalar(x *big.Int) *GeneratorVector {
 	newVector := make([]*ECPoint, 0)
 	for _, point := range gv.vector {
 		p := new(ECPoint).ScalarMult(point, x)
+		newVector = append(newVector, p)
+	}
+
+	return NewGeneratorVector(newVector)
+}
+
+// Hadamard computes gi*ai + ... + gn*an.
+func (gv *GeneratorVector) Hadamard(exponent []*big.Int) *GeneratorVector {
+	if gv.Size() != len(exponent) {
+		panic("exponent len not equal with generator vector size")
+	}
+
+	newVector := make([]*ECPoint, 0)
+
+	for i, point := range gv.vector {
+		p := new(ECPoint).ScalarMult(point, exponent[i])
 		newVector = append(newVector, p)
 	}
 

@@ -16,7 +16,12 @@ type FieldVector struct {
 // NewFieldVector creates instance of field vector.
 func NewFieldVector(items []*big.Int, n *big.Int) *FieldVector {
 	f := FieldVector{}
-	f.items = items
+
+	// make sure item is under n.
+	f.items = make([]*big.Int, 0)
+	for _, item := range items {
+		f.items = append(f.items, new(big.Int).Mod(item, n))
+	}
 	f.n = new(big.Int).Set(n)
 
 	return &f
@@ -36,6 +41,34 @@ func NewRandomFieldVector(order *big.Int, n int) *FieldVector {
 		}
 
 		f.items = append(f.items, tmp)
+	}
+
+	return &f
+}
+
+// RepeatItemVector returns a field vector whose items are same.
+func RepeatItemVector(item, order *big.Int, n int) *FieldVector {
+	f := FieldVector{}
+	f.n = new(big.Int).Set(order)
+	f.items = make([]*big.Int, 0)
+	newItem := new(big.Int).Set(item)
+	newItem.Mod(newItem, order)
+	for i := 0; i < n; i++ {
+		f.items = append(f.items, new(big.Int).Set(newItem))
+	}
+
+	return &f
+}
+
+// PowVector returns a field vector(1, y^1, y^2,..., y^n-1)
+func PowVector(itemBase, order *big.Int, n int) *FieldVector {
+	f := FieldVector{}
+	f.items = make([]*big.Int, 0)
+	f.n = new(big.Int).Set(order)
+	for i := 0; i < n; i++ {
+		exponent := new(big.Int).SetUint64(uint64(i))
+		item := new(big.Int).Exp(itemBase, exponent, order)
+		f.items = append(f.items, item)
 	}
 
 	return &f
@@ -63,15 +96,17 @@ func (f *FieldVector) SubFieldVector(start, end int) *FieldVector {
 		panic(fmt.Sprintf("field vector index start %d, end %d out of range", start, end))
 	}
 
-	newItems := make([]*big.Int, end-start)
-	copy(newItems, f.items[start:end])
+	newItems := make([]*big.Int, 0)
+	for _, item := range f.items[start:end] {
+		newItems = append(newItems, new(big.Int).Set(item))
+	}
 
 	return NewFieldVector(newItems, f.n)
 }
 
 // First returns first item in field.
 func (f *FieldVector) First() *big.Int {
-	return f.Get(0)
+	return new(big.Int).Set(f.Get(0))
 }
 
 // Get returns item by index.
@@ -97,10 +132,38 @@ func (f *FieldVector) InnerProduct(other *FieldVector) *big.Int {
 
 // GetVector returns underlying items.
 func (f *FieldVector) GetVector() []*big.Int {
-	newItems := make([]*big.Int, f.Size())
-	copy(newItems, f.items)
+	newItems := make([]*big.Int, 0)
+	for _, item := range f.items {
+		newItems = append(newItems, new(big.Int).Set(item))
+	}
 
 	return newItems
+}
+
+// AllItemsSubOne returns a new field vector whose items = ori item - 1 mod n.
+func (f *FieldVector) AllItemsSubOne() *FieldVector {
+	newItems := make([]*big.Int, 0)
+	one := new(big.Int).SetUint64(1)
+	for _, item := range f.items {
+		newItem := new(big.Int).Sub(item, one)
+		newItem.Mod(newItem, f.n)
+
+		newItems = append(newItems, newItem)
+	}
+
+	return NewFieldVector(newItems, f.n)
+}
+
+// ModInverse returns new field vector whose item = modInverse(ori item).
+func (f *FieldVector) ModInverse() *FieldVector {
+	newItems := make([]*big.Int, 0)
+
+	for _, item := range f.items {
+		newItem := new(big.Int).ModInverse(item, f.n)
+		newItems = append(newItems, newItem)
+	}
+
+	return NewFieldVector(newItems, f.n)
 }
 
 // Times compute item * x and returns new instance.
@@ -130,4 +193,32 @@ func (f *FieldVector) AddFieldVector(other *FieldVector) *FieldVector {
 	}
 
 	return NewFieldVector(newItems, f.n)
+}
+
+// Hadamard returns field vector (a1*b1, a2*b2, ..., an*bn).
+func (f *FieldVector) Hadamard(other *FieldVector) *FieldVector {
+	if f.Size() != other.Size() {
+		panic(fmt.Sprintf("filed vector size not equal %d != %d", f.Size(), other.Size()))
+	}
+
+	newItems := make([]*big.Int, 0)
+	for i, item := range f.items {
+		t := new(big.Int).Mul(item, other.Get(i))
+		t.Mod(t, f.n)
+		newItems = append(newItems, t)
+	}
+
+	return NewFieldVector(newItems, f.n)
+}
+
+// Sum returns a1 + a2 + .... + an.
+func (f *FieldVector) Sum() *big.Int {
+	res := new(big.Int).SetUint64(0)
+
+	for _, item := range f.items {
+		res.Add(res, item)
+		res.Mod(res, f.n)
+	}
+
+	return res
 }
