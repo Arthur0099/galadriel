@@ -5,13 +5,14 @@ import (
 )
 
 func TestSigmaProtocol(t *testing.T) {
+	sys := NewTwistedELGamalSystem()
 	// generate key pair for alice and bob.
-	aliceKey, err := GenerateKey()
+	aliceKey, err := sys.GenerateKey()
 	if err != nil {
 		t.Error("generate key pair for alice failed", err)
 		return
 	}
-	bobKey, err := GenerateKey()
+	bobKey, err := sys.GenerateKey()
 	if err != nil {
 		t.Error("generate key pair for bob failed", err)
 		return
@@ -24,14 +25,14 @@ func TestSigmaProtocol(t *testing.T) {
 		Flag   bool
 	}{
 		{
-			MsgA:   []byte("test"),
-			MsgB:   []byte("test"),
+			MsgA:   []byte("hh"),
+			MsgB:   []byte("hh"),
 			Expect: true,
 			Flag:   false,
 		},
 		{
-			MsgA:   []byte("first"),
-			MsgB:   []byte("second"),
+			MsgA:   []byte("a"),
+			MsgB:   []byte("b"),
 			Expect: false,
 			Flag:   true,
 		},
@@ -39,27 +40,27 @@ func TestSigmaProtocol(t *testing.T) {
 
 	for i, test := range tests {
 		// msg to be encoded.
-		ct1, err := Encrypt(&aliceKey.PublicKey, test.MsgA)
+		ct1, err := sys.Encrypt(&aliceKey.PublicKey, test.MsgA)
 		if err != nil {
 			t.Error(i, "encrypt ct1 for alice failed", err)
 			continue
 		}
-		ct2, err := Encrypt(&bobKey.PublicKey, test.MsgB)
+		ct2, err := sys.Encrypt(&bobKey.PublicKey, test.MsgB)
 		if err != nil {
 			t.Error(i, "encrypt ct2 for bob failed", err)
 			continue
 		}
 
 		// generate proof.
-		prove := &SigmaProver{}
-		prove.TestFlag = test.Flag
-		proof, err := prove.GenerateProof(&aliceKey.PublicKey, &bobKey.PublicKey, ct1, ct2)
+		sigmaSys := NewSigmaSys()
+		sigmaSys.TestFlag = test.Flag
+		proof, err := sigmaSys.GenerateProof(&aliceKey.PublicKey, &bobKey.PublicKey, ct1, ct2)
 		if err != nil {
 			t.Error(i, "generate proof for sigma protocol failed", err)
 			continue
 		}
 
-		if VerifySigmaProof(proof) != test.Expect {
+		if sigmaSys.VerifySigmaProof(proof) != test.Expect {
 			t.Error(i, "sigma proof verify except %v, actual %c", test.Expect, !test.Expect)
 		}
 	}
@@ -67,7 +68,8 @@ func TestSigmaProtocol(t *testing.T) {
 }
 
 func TestDLESigmaProof(t *testing.T) {
-	key, err := GenerateKey()
+	sys := NewTwistedELGamalSystem()
+	key, err := sys.GenerateKey()
 	if err != nil {
 		t.Error("key generation failed")
 		return
@@ -79,24 +81,24 @@ func TestDLESigmaProof(t *testing.T) {
 		Expect bool
 	}{
 		{
-			MsgA:   []byte("dlesigmaproof"),
-			MsgB:   []byte("dlesigmaproof"),
+			MsgA:   []byte("hh"),
+			MsgB:   []byte("hh"),
 			Expect: true,
 		},
 		{
-			MsgA:   []byte("sss"),
-			MsgB:   []byte("ccc"),
+			MsgA:   []byte("aa"),
+			MsgB:   []byte("bb"),
 			Expect: false,
 		},
 	}
 
 	for i, test := range tests {
-		ct1, err := Encrypt(&key.PublicKey, test.MsgA)
+		ct1, err := sys.Encrypt(&key.PublicKey, test.MsgA)
 		if err != nil {
 			t.Error("encrypt failed")
 			return
 		}
-		ct2, err := Encrypt(&key.PublicKey, test.MsgB)
+		ct2, err := sys.Encrypt(&key.PublicKey, test.MsgB)
 		if err != nil {
 			t.Error("encrypt failed")
 			return
@@ -107,10 +109,14 @@ func TestDLESigmaProof(t *testing.T) {
 		}
 
 		prover := DLESigmaProver{}
+		prover.params = Params()
 		proof, err := prover.GenerateProof(ct1, ct2, key)
 		if err != nil {
 			t.Error("generate proof failed")
 			return
+		}
+		if test.Expect {
+			proof.Persist("solidity/dlesigmaproof")
 		}
 
 		if VerifyDLESigmaProof(proof) != test.Expect {

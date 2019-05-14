@@ -2,15 +2,38 @@ package pgc
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
+	"errors"
+	"io"
 	"math/big"
 
 	log "github.com/inconshreveable/log15"
 )
 
+var one = new(big.Int).SetUint64(1)
+var two = new(big.Int).SetUint64(2)
+
 // CTEncPoint respresents encrypted ct tx point on curve.
 type CTEncPoint struct {
+	// X=pk*r; Y=g*r + h*v.(r is randomness, v is the msg)
 	X, Y *ECPoint
+}
+
+// PublicKey represents a public key used in twisted elgamal.
+type PublicKey struct {
+	elliptic.Curve
+
+	// Point on curve.
+	X, Y *big.Int
+}
+
+// PrivateKey represents a private key used in twisted elgamal.
+type PrivateKey struct {
+	// sk
+	D *big.Int
+
+	PublicKey
 }
 
 // TwistedELGamalCT respresents a encrypted transaction encoded in twisted-elgamal format.
@@ -32,14 +55,64 @@ func (ct *TwistedELGamalCT) CopyPublicPoint() *CTEncPoint {
 	return &ecPoints
 }
 
+// copy from crypto/ecdsa.
+// randFieldElement returns a random element of the field underlying the given
+// curve using the procedure given in [NSA] A.2.1.
+func randFieldElement(c elliptic.Curve, rand io.Reader) (k *big.Int, err error) {
+	params := c.Params()
+	b := make([]byte, params.BitSize/8+8)
+	_, err = io.ReadFull(rand, b)
+	if err != nil {
+		return
+	}
+
+	k = new(big.Int).SetBytes(b)
+	n := new(big.Int).Sub(params.N, one)
+	k.Mod(k, n)
+	k.Add(k, one)
+	return
+}
+
+// TwistedELGamalSystem represents twisted elgamal system for both encryption and decryption.
+type TwistedELGamalSystem struct {
+	params TwistedELGamalPublicParams
+}
+
+// NewTwistedELGamalSystem returns instance of TwistedELGamalSystem.
+func NewTwistedELGamalSystem() *TwistedELGamalSystem {
+	t := TwistedELGamalSystem{}
+	t.params = Params()
+
+	return &t
+}
+
 // GenerateKey generates key pair using btcec s256 curve.
-func GenerateKey() (key *ecdsa.PrivateKey, err error) {
-	key, err = ecdsa.GenerateKey(S256(), rand.Reader)
+func (twELGSys *TwistedELGamalSystem) GenerateKey() (priv *ecdsa.PrivateKey, err error) {
+	curve := twELGSys.params.Curve()
+	h := twELGSys.params.GetH()
+
+	k, err := randFieldElement(curve, rand.Reader)
+	if err != nil {
+		return
+	}
+
+	priv = new(ecdsa.PrivateKey)
+	priv.PublicKey.Curve = curve
+	priv.D = k
+	// Warng: x, y == h * sk.
+	priv.PublicKey.X, priv.PublicKey.Y = curve.ScalarMult(h.X, h.Y, k.Bytes())
 	return
 }
 
 // Encrypt encrypts msg by in twisted elgamal way.
-func Encrypt(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
+func (twELGSys *TwistedELGamalSystem) Encrypt(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
+	msgBit := new(big.Int).SetBytes(msg)
+	log.Debug("msg", "v", msgBit, "string(b)", string(msg))
+
+	if msgBit.BitLen() > twELGSys.params.BitSizeLimit() {
+		return nil, errors.New("msg reach size limit")
+	}
+
 	// Create ct instance.
 	ct := new(TwistedELGamalCT)
 	ct.X = NewEmptyECPoint(pk.Curve)
@@ -61,76 +134,49 @@ func Encrypt(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
 	// compute pk * r.(pk ^ r)
 	ct.X.SetFromPublicKey(pk)
 	ct.X.ScalarMult(ct.X, r)
-	// compute g * r.(g ^ r)
-	ct.Y.ScalarBaseMult(r)
-	// compute h * m.(h ^ m)
-	pubParams := Params()
-	s2X, s2Y := curve.ScalarMult(pubParams.ElgGenerator.X, pubParams.ElgGenerator.Y, msg)
-	log.Debug("encrypt msg(h^m)", "x", s2X, "y", s2Y)
 
-	// compute g * r + h * m.
+	// compute g * m.(g ^ m)
+	g := twELGSys.params.GetG()
+	ct.Y.ScalarMult(g, msgBit)
+	log.Debug("encrypt msg(g^m)", "x", ct.Y.X, "y", ct.Y.Y)
+	// compute h * r.(h ^ r)
+	h := twELGSys.params.GetH()
+	s2X, s2Y := curve.ScalarMult(h.X, h.Y, r.Bytes())
+	// compute g * m + h * r.
 	ct.Y.Add(ct.Y, NewECPoint(s2X, s2Y, curve))
 
 	return ct, nil
 }
 
 // Decrypt decrypts msg in twisted elgamal way.
-func Decrypt(sk *ecdsa.PrivateKey, ct *TwistedELGamalCT) []byte {
+func (twELGSys *TwistedELGamalSystem) Decrypt(sk *ecdsa.PrivateKey, ct *TwistedELGamalCT) []byte {
 	// get public curve.
 	curve := sk.PublicKey.Curve
 	// compute the inverse of sk.
 	skInverse := new(big.Int).ModInverse(sk.D, curve.Params().N)
-	// compute X * skInverse(X ^ skInverse) == g * r.
+	// compute X * skInverse(X ^ skInverse) == h * r.
 	ct.X.ScalarMult(ct.X, skInverse)
 	// use ct.Y - ct.X Point to get encoded msg.
 	// get Affine negation formulas of ct.Y.
 	encodedMsg := ct.Y.Sub(ct.Y, ct.X)
-	log.Debug("decrypt msg(h^m)", "x", encodedMsg.X, "y", encodedMsg.Y)
-	_ = encodedMsg
+	log.Debug("decrypt msg(g^m)", "x", encodedMsg.X, "y", encodedMsg.Y)
 
-	// todo: decrypt encoded msg.
-	return []byte{}
+	return twELGSys.decryptEncodedMsg(encodedMsg)
 }
 
-// DecryptEncodedMsg decrypts and returns original bytes of msg.
-func DecryptEncodedMsg() []byte {
-	//
-	return []byte{}
-}
+// Decryptencodedmsg decrypts and returns original bytes of msg.
+// encodeMsg = g * m
+func (twELGSys *TwistedELGamalSystem) decryptEncodedMsg(encodeMsg *ECPoint) []byte {
+	bit := uint64(twELGSys.params.BitSizeLimit())
+	upperLimit := new(big.Int).Exp(two, new(big.Int).SetUint64(bit), nil)
+	g := twELGSys.params.GetG()
 
-// SubECPoint computes x - y.
-func SubECPoint(x, y *ecdsa.PublicKey) *ecdsa.PublicKey {
-	curve := x.Curve
-
-	// create instance of new point.
-	newPoint := new(ecdsa.PublicKey)
-	newPoint.Curve = curve
-
-	// get negation of x.
-	negation := negation(y)
-	// calculate negation of new point.
-	newPointNegaX, newPointNegaY := curve.Add(negation.X, negation.Y, x.X, x.Y)
-	newPoint.X = newPointNegaX
-	// set new point y to symmetry
-	newPoint.Y = newPointNegaY
-
-	return newPoint
-}
-
-// negation returns negation of ecpoint x on curve.
-func negation(x *ecdsa.PublicKey) *ecdsa.PublicKey {
-	negation := new(ecdsa.PublicKey)
-	negation.Curve = x.Curve
-
-	negation.X = new(big.Int).Set(x.X)
-	negation.Y = new(big.Int).Set(x.Y)
-	// y' = -y mod p.
-	negation.Y = negation.Y.Neg(negation.Y)
-	negation.Y = negation.Y.Mod(negation.Y, x.Curve.Params().P)
-	//negation.Y = negation.Y.Mod(negation.Y, negation.Curve.Params().N)
-	if !negation.Curve.IsOnCurve(negation.X, negation.Y) {
-		panic("negation of x, y is not on curve")
+	for i := uint64(1); i < upperLimit.Uint64(); i++ {
+		point := new(ECPoint).ScalarMult(g, new(big.Int).SetUint64(i))
+		if point.Equals(encodeMsg) {
+			return new(big.Int).SetUint64(i).Bytes()
+		}
 	}
 
-	return negation
+	return []byte{}
 }

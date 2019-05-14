@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"math/big"
 
@@ -20,21 +21,31 @@ type SigmaProof struct {
 	ct1, ct2 *CTEncPoint
 }
 
-// SigmaProver .
-type SigmaProver struct {
+// SigmaSys .
+type SigmaSys struct {
 	// TestFlag means generation is for a test purpose(if set true).
 	TestFlag bool
+	// params
+	params TwistedELGamalPublicParams
+}
+
+// NewSigmaSys creates instance.
+func NewSigmaSys() *SigmaSys {
+	s := SigmaSys{}
+	s.params = Params()
+
+	return &s
 }
 
 // GenerateProof generates proof to prove that two encryptions(ct1, ct2) of the same
 // message under pk1 and pk2.
-func (prover *SigmaProver) GenerateProof(pk1, pk2 *ecdsa.PublicKey, ct1, ct2 *TwistedELGamalCT) (proof *SigmaProof, err error) {
+func (sigmaSys *SigmaSys) GenerateProof(pk1, pk2 *ecdsa.PublicKey, ct1, ct2 *TwistedELGamalCT) (proof *SigmaProof, err error) {
 	curve := pk1.Curve
 	n := curve.Params().N
 
 	// check msg encoded is same.
 	// testFlag == true means generate a fake proof for test purpose.
-	if !prover.TestFlag && !bytes.Equal(ct1.EncMsg, ct2.EncMsg) {
+	if !sigmaSys.TestFlag && !bytes.Equal(ct1.EncMsg, ct2.EncMsg) {
 		err = errors.New("msg encoded in two ct isn't same")
 		return
 	}
@@ -54,20 +65,22 @@ func (prover *SigmaProver) GenerateProof(pk1, pk2 *ecdsa.PublicKey, ct1, ct2 *Tw
 	}
 
 	// compute proof.
-	h := Params().ElgGenerator
-	//
+	h := params.GetH()
+	g := params.GetG()
+
+	// A2 = pk1 * a1; A2 = pk2 * a2.
 	A1 := new(ECPoint).SetFromPublicKey(pk1)
 	A1.ScalarMult(A1, a1)
 	A2 := new(ECPoint).SetFromPublicKey(pk2)
 	A2.ScalarMult(A2, a2)
 
-	// compute g * a1 + h * b
-	hb := new(ECPoint).ScalarMult(h, b)
-	ga1 := NewEmptyECPoint(curve).ScalarBaseMult(a1)
-	B1 := new(ECPoint).Add(hb, ga1)
-	// compute g * a2 + h * b
-	ga2 := NewEmptyECPoint(curve).ScalarBaseMult(a2)
-	B2 := new(ECPoint).Add(ga2, hb)
+	// compute B1 = g * b + h * a1.
+	ha1 := new(ECPoint).ScalarMult(h, a1)
+	gb := new(ECPoint).ScalarMult(g, b)
+	B1 := new(ECPoint).Add(gb, ha1)
+	// compute B2 = g * b + h * a2.
+	ha2 := new(ECPoint).ScalarMult(h, a2)
+	B2 := new(ECPoint).Add(gb, ha2)
 
 	// compute challenge e.
 	e, err := SigmaFiatShamir(A1, A2, B1, B2)
@@ -76,17 +89,17 @@ func (prover *SigmaProver) GenerateProof(pk1, pk2 *ecdsa.PublicKey, ct1, ct2 *Tw
 	}
 
 	// compute proof.
-	// z1.
+	// z1 = a1 + e*r1.
 	z1 := new(big.Int).Mul(e, ct1.R)
 	z1 = z1.Mod(z1, n)
 	z1 = z1.Add(z1, a1)
 	z1 = z1.Mod(z1, n)
-	// z2.
+	// z2 = a2 + e*r2.
 	z2 := new(big.Int).Mul(e, ct2.R)
 	z2 = z2.Mod(z2, n)
 	z2 = z2.Add(z2, a2)
 	z2 = z2.Mod(z2, n)
-	// z3.
+	// z3 = b + e*m.
 	z3 := new(big.Int).Mul(e, new(big.Int).SetBytes(ct1.EncMsg))
 	z3 = z3.Mod(z3, n)
 	z3 = z3.Add(z3, b)
@@ -117,36 +130,37 @@ func SigmaFiatShamir(A1, A2, B1, B2 *ECPoint) (*big.Int, error) {
 }
 
 // VerifySigmaProof validates proof.
-func VerifySigmaProof(proof *SigmaProof) bool {
+func (sigmaSys *SigmaSys) VerifySigmaProof(proof *SigmaProof) bool {
 	e, err := SigmaFiatShamir(proof.A1, proof.A2, proof.B1, proof.B2)
 	if err != nil {
 		return false
 	}
 	// check pk1 * z1 == A1 + X1 * e.
-	if !checkSigmaStep1(proof.Pk1, proof.A1, proof.ct1.X, proof.z1, e) {
+	if !sigmaSys.checkSigmaStep1(proof.Pk1, proof.A1, proof.ct1.X, proof.z1, e) {
 		return false
 	}
 
 	// check pk2 * z2 == A2 + X2 * e.
-	if !checkSigmaStep1(proof.Pk2, proof.A2, proof.ct2.X, proof.z2, e) {
+	if !sigmaSys.checkSigmaStep1(proof.Pk2, proof.A2, proof.ct2.X, proof.z2, e) {
 		return false
 	}
 
-	h := Params().ElgGenerator
-	// Check G * z1 + h * z3 == B1 + Y1 * e.
-	if !checkSigmaStep2(h, proof.B1, proof.ct1.Y, proof.z1, proof.z3, e) {
+	h := sigmaSys.params.GetH()
+	g := sigmaSys.params.GetG()
+	// Check h * z1 + g * z3 == B1 + Y1 * e.
+	if !sigmaSys.checkSigmaStep2(g, h, proof.B1, proof.ct1.Y, proof.z1, proof.z3, e) {
 		return false
 	}
 
-	// check g * z2 + h * z3 == B2 + Y2 * e.
-	if !checkSigmaStep2(h, proof.B2, proof.ct2.Y, proof.z2, proof.z3, e) {
+	// check h * z2 + g * z3 == B2 + Y2 * e.
+	if !sigmaSys.checkSigmaStep2(g, h, proof.B2, proof.ct2.Y, proof.z2, proof.z3, e) {
 		return false
 	}
 	return true
 }
 
 // checkSigmaStep1 checks pk * z == A + X * e or not.
-func checkSigmaStep1(pk, A, X *ECPoint, z, e *big.Int) bool {
+func (sigmaSys *SigmaSys) checkSigmaStep1(pk, A, X *ECPoint, z, e *big.Int) bool {
 
 	// compute x * e + A
 	actual := new(ECPoint).ScalarMult(X, e)
@@ -162,12 +176,12 @@ func checkSigmaStep1(pk, A, X *ECPoint, z, e *big.Int) bool {
 	return true
 }
 
-// checkSigmaStep2 checks g * z + h * z' == B + Y * e.
-func checkSigmaStep2(h, B, Y *ECPoint, za, zb, e *big.Int) bool {
+// checkSigmaStep2 checks h*za + g*zb == B + Y*e.
+func (sigmaSys *SigmaSys) checkSigmaStep2(g, h, B, Y *ECPoint, za, zb, e *big.Int) bool {
 	// compute g * za + h * zb.
-	gza := NewEmptyECPoint(h.Curve).ScalarBaseMult(za)
-	hzb := new(ECPoint).ScalarMult(h, zb)
-	actual := new(ECPoint).Add(gza, hzb)
+	gzb := new(ECPoint).ScalarMult(g, zb)
+	hza := new(ECPoint).ScalarMult(h, za)
+	actual := new(ECPoint).Add(gzb, hza)
 	// compute B + Y * e.
 	ye := new(ECPoint).ScalarMult(Y, e)
 	expect := new(ECPoint).Add(ye, B)
@@ -181,16 +195,53 @@ func checkSigmaStep2(h, B, Y *ECPoint, za, zb, e *big.Int) bool {
 
 // DLESigmaProver holds method to prove two ciphertexts encrypt the same value under same public key.
 type DLESigmaProver struct {
-	//
+	params TwistedELGamalPublicParams
 }
 
 // DLESigmaProof includes items of zero-knowledge proof.
 type DLESigmaProof struct {
-	A1, A2 *ECPoint
+	A1 *ECPoint
+	A2 *ECPoint
 
 	Z *big.Int
 
-	g1, h1, g2, h2 *ECPoint
+	G1 *ECPoint
+	H1 *ECPoint
+	G2 *ECPoint
+	H2 *ECPoint
+}
+
+// MarshalJSON defines custom method to json.
+func (dleProof *DLESigmaProof) MarshalJSON() ([]byte, error) {
+	newJSON := struct {
+		A1 *ECPoint `json:"A1"`
+		A2 *ECPoint `Json:"A2"`
+		Z  string   `json:"Z"`
+		G1 *ECPoint `json:"g1"`
+		H1 *ECPoint `json:"h1"`
+		G2 *ECPoint `json:"g2"`
+		H2 *ECPoint `json:"h2"`
+	}{
+		A1: dleProof.A1,
+		A2: dleProof.A2,
+		Z:  dleProof.Z.String(),
+		G1: dleProof.G1,
+		H1: dleProof.H1,
+		G2: dleProof.G2,
+		H2: dleProof.H2,
+	}
+
+	return json.Marshal(&newJSON)
+}
+
+// Persist store the data of dlesigma proof to a file by file path.
+func (dleProof *DLESigmaProof) Persist(path string) {
+	data, err := json.Marshal(dleProof)
+	if err != nil {
+		panic(err)
+	}
+
+	WriteToFile(data, path)
 }
 
 // GenerateProof generates zero knowledge proof to prove two ciphertexts encrypt the same value under same public key.
@@ -200,7 +251,7 @@ func (dleProver *DLESigmaProver) GenerateProof(ori, refresh *TwistedELGamalCT, s
 	// h1 = X(fresh) - X(ori)
 	h1 := new(ECPoint).Sub(refresh.X, ori.X)
 	// g2 = G base point.
-	g2 := NewECPoint(sk.Curve.Params().Gx, sk.Curve.Params().Gy, sk.Curve)
+	g2 := dleProver.params.GetH()
 	// h2 = pk.
 	h2 := new(ECPoint).SetFromPublicKey(&sk.PublicKey)
 	// witness = sk.
@@ -238,10 +289,10 @@ func (dleProver *DLESigmaProver) generateProof(g1, h1, g2, h2 *ECPoint, w *big.I
 	proof.A1 = A1
 	proof.A2 = A2
 	proof.Z = z
-	proof.g1 = g1
-	proof.h1 = h1
-	proof.g2 = g2
-	proof.h2 = h2
+	proof.G1 = g1
+	proof.H1 = h1
+	proof.G2 = g2
+	proof.H2 = h2
 
 	return proof, nil
 }
@@ -256,11 +307,11 @@ func VerifyDLESigmaProof(proof *DLESigmaProof) bool {
 	}
 
 	// check g1 * z == A1 + h1 * e.
-	if !checkDLESigmaProof(proof.g1, proof.A1, proof.h1, proof.Z, e) {
+	if !checkDLESigmaProof(proof.G1, proof.A1, proof.H1, proof.Z, e) {
 		return false
 	}
 	// check g2 * z == A2 + h2 * e.
-	if !checkDLESigmaProof(proof.g2, proof.A2, proof.h2, proof.Z, e) {
+	if !checkDLESigmaProof(proof.G2, proof.A2, proof.H2, proof.Z, e) {
 		return false
 	}
 

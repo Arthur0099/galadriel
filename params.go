@@ -1,18 +1,60 @@
 package pgc
 
 import (
-	"math/big"
+	"crypto/elliptic"
 )
+
+// KeyBasePoint represents the base point used in curve to generate keys.
+type KeyBasePoint interface {
+	// GetH() returns base point used in curve.
+	GetH() *ECPoint
+}
+
+// TwistedELGamalPublicParams contains params used in twisting elgamal encrypt protocol.
+type TwistedELGamalPublicParams interface {
+	// GetG return g generator point.
+	GetG() *ECPoint
+
+	KeyBasePoint
+
+	// BitSizeLimit returns the limit of the bit size of msg to be encrypted.
+	BitSizeLimit() int
+
+	// Curve returns ec curve used in underlying field.
+	Curve() elliptic.Curve
+}
 
 // PublicParams includes global public params used in PGC and bullet proof.
 type PublicParams struct {
-	// pgc public params.
-	ElgGenerator *ECPoint
+	//
+	g, h *ECPoint
 
 	//
-	G *ECPoint
+	curve elliptic.Curve
 
-	// bullet proof params.
+	// bitSize is the size of msg.
+	// msg < 2^BitSize.
+	bitSize int
+}
+
+// GetG returns g point.
+func (pp *PublicParams) GetG() *ECPoint {
+	return pp.g.Copy()
+}
+
+// GetH returns h point.
+func (pp *PublicParams) GetH() *ECPoint {
+	return pp.h.Copy()
+}
+
+// BitSizeLimit returns the limit of the bit size of msg to be encrypted.
+func (pp *PublicParams) BitSizeLimit() int {
+	return pp.bitSize
+}
+
+// Curve returns ec curve used in underlying field.
+func (pp *PublicParams) Curve() elliptic.Curve {
+	return pp.curve
 }
 
 var params PublicParams
@@ -24,15 +66,13 @@ func Params() *PublicParams {
 
 // init public params.
 func init() {
-	// result is e7f38f4a9d49b6b6f46d18d6ae54be8a9e4df63e6b291c2e89b6915d5f45235e.
-	h := Keccak256([]byte("h generator"))
 	curve := S256()
+	// to be compatible with sig curve.
+	h := NewECPoint(curve.Params().Gx, curve.Params().Gy, curve)
+	g := "g generator of twisted elg"
 
-	// make sure h is less than N in curve.
-	if new(big.Int).SetBytes(h).Cmp(curve.Params().N) >= 0 {
-		panic("h generator is bigger than N in curve")
-	}
-
-	x, y := curve.ScalarBaseMult(h)
-	params.ElgGenerator = NewECPoint(x, y, curve)
+	params.g = NewECPointByString(g, curve)
+	params.h = h
+	params.curve = curve
+	params.bitSize = 16
 }

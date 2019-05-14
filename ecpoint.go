@@ -4,12 +4,28 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/json"
 	"math/big"
 )
 
 // ECPoint represents a point on elliptic curve.
 type ECPoint struct {
-	ecdsa.PublicKey
+	X     *big.Int
+	Y     *big.Int
+	Curve elliptic.Curve
+}
+
+// MarshalJSON defines custom way to marshal json.
+func (ec *ECPoint) MarshalJSON() ([]byte, error) {
+	newJSON := struct {
+		X string
+		Y string
+	}{
+		X: ec.X.String(),
+		Y: ec.Y.String(),
+	}
+
+	return json.Marshal(&newJSON)
 }
 
 // NewECPoint returns instance of ec point.
@@ -32,6 +48,15 @@ func NewRandomECPoint(curve elliptic.Curve) *ECPoint {
 	hx, hy := curve.ScalarBaseMult(h.Bytes())
 
 	return NewECPoint(hx, hy, curve)
+}
+
+// NewECPointByString takes a string as input and returns a ecpoint on curve.
+func NewECPointByString(s string, curve elliptic.Curve) *ECPoint {
+	data := Keccak256([]byte(s))
+	scalar := new(big.Int).SetBytes(data)
+	scalar.Mod(scalar, curve.Params().N)
+
+	return NewEmptyECPoint(curve).ScalarBaseMult(scalar)
 }
 
 // NewEmptyECPoint creates instance of ec point without x or y point.

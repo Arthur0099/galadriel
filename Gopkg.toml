@@ -1,0 +1,11 @@
+[[constraint]]
+  name = "github.com/inconshreveable/log15"
+  branch = "master"
+
+[[constraint]]
+  name = "github.com/ethereum/go-ethereum"
+  version = "1.8.27"
+
+[[constraint]]
+  name = "github.com/btcsuite/btcd"
+  branch = "master"
