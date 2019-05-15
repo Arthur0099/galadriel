@@ -1,20 +1,15 @@
-// Copy from https://github.com/HarryR/solcrypto/blob/master/contracts/SECP2561k.sol.
 pragma solidity >= 0.5.0 < 0.6.0;
 
-/*
-Taken from https://github.com/jbaylina/ecsol and https://github.com/1Address/ecsol
-
-License: GPL-3.0
-*/
-
 import "./library/Secp256k1.sol";
+import "./library/BN128.sol";
 
 // verify dle sigmaproof.
 contract DLESigmaVerifier {
 
   using Secp256k1 for *;
 
-  constructor() public {}
+  using BN128 for BN128.G1Point;
+  using BN128 for *;
 
   /**
    * @dev verify dle sigma proof.
@@ -26,7 +21,7 @@ contract DLESigmaVerifier {
    * points[10-11]: h2 point.
    * z = a + e*w.
    */
-  function verifyDLESigmaProof(uint[12] memory points, uint z) public pure returns(bool) {
+  function verifyDLESigmaProof(uint[12] memory points, uint z) public view returns(bool) {
     uint e = computeChallenge(points[0], points[1], points[2], points[3]);
     uint[6] memory check1;
     check1[0] = points[4];
@@ -35,7 +30,7 @@ contract DLESigmaVerifier {
     check1[3] = points[1];
     check1[4] = points[6];
     check1[5] = points[7];
-    if (!checkDLESigmaProof(check1, z, e)) {
+    if (!checkDLESigmaProofBn128(check1, z, e)) {
         return false;
     }
 
@@ -46,7 +41,7 @@ contract DLESigmaVerifier {
     check2[3] = points[3];
     check2[4] = points[10];
     check2[5] = points[11];
-    if (!checkDLESigmaProof(check2, z, e)) {
+    if (!checkDLESigmaProofBn128(check2, z, e)) {
         return false;
     }
 
@@ -76,7 +71,21 @@ contract DLESigmaVerifier {
     return (gzX == checkX && gzY == checkY);
   }
 
+  /*
+   *
+   */
+  function checkDLESigmaProofBn128(uint[6] memory points, uint z, uint e) internal view returns(bool) {
+    BN128.G1Point memory g = BN128.G1Point(points[0], points[1]);
+    BN128.G1Point memory A = BN128.G1Point(points[2], points[3]);
+    BN128.G1Point memory h = BN128.G1Point(points[4], points[5]);
+
+    g = g.mul(z);
+    h = h.mul(e).add(A);
+
+    return g.X == h.X && g.Y == h.Y;
+  }
+
   function computeChallenge(uint a, uint b, uint c, uint d) internal pure returns(uint) {
-    return uint(keccak256(abi.encodePacked(a, b, c, d)));
+    return uint(keccak256(abi.encodePacked(a, b, c, d))).mod();
   }
 }

@@ -2,6 +2,7 @@ package pgc
 
 import (
 	"crypto/elliptic"
+	"encoding/json"
 )
 
 // KeyBasePoint represents the base point used in curve to generate keys.
@@ -57,6 +58,19 @@ func (pp *PublicParams) Curve() elliptic.Curve {
 	return pp.curve
 }
 
+// MarshalJSON defines custom way to json.
+func (pp *PublicParams) MarshalJSON() ([]byte, error) {
+	newJSON := struct {
+		G *ECPoint `json:"g"`
+		H *ECPoint `json:"h"`
+	}{
+		G: pp.g,
+		H: pp.h,
+	}
+
+	return json.Marshal(&newJSON)
+}
+
 var params PublicParams
 
 // Params returns public params used in protocol.
@@ -66,7 +80,9 @@ func Params() *PublicParams {
 
 // init public params.
 func init() {
-	curve := S256()
+	// todo: set config to switch curve.
+	//curve := S256()
+	curve := BN256()
 	// to be compatible with sig curve.
 	h := NewECPoint(curve.Params().Gx, curve.Params().Gy, curve)
 	g := "g generator of twisted elg"

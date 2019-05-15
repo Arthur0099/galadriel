@@ -21,6 +21,51 @@ type SigmaProof struct {
 	ct1, ct2 *CTEncPoint
 }
 
+// MarshalJSON defines custom way to json.
+func (sigmaProof *SigmaProof) MarshalJSON() ([]byte, error) {
+	newJSON := struct {
+		Z1  string   `json:"z1"`
+		Z2  string   `json:"z2"`
+		Z3  string   `json:"z3"`
+		Pk1 *ECPoint `json:"pk1"`
+		Pk2 *ECPoint `json:"pk2"`
+		A1  *ECPoint `json:"A1"`
+		A2  *ECPoint `json:"A2"`
+		B1  *ECPoint `json:"B1"`
+		B2  *ECPoint `json:"B2"`
+		X1  *ECPoint `json:"X1"`
+		Y1  *ECPoint `json:"Y1"`
+		X2  *ECPoint `json:"X2"`
+		Y2  *ECPoint `json:"Y2"`
+	}{
+		Z1:  sigmaProof.z1.String(),
+		Z2:  sigmaProof.z2.String(),
+		Z3:  sigmaProof.z3.String(),
+		Pk1: sigmaProof.Pk1,
+		Pk2: sigmaProof.Pk2,
+		A1:  sigmaProof.A1,
+		A2:  sigmaProof.A2,
+		B1:  sigmaProof.B1,
+		B2:  sigmaProof.B2,
+		X1:  sigmaProof.ct1.X,
+		Y1:  sigmaProof.ct1.Y,
+		X2:  sigmaProof.ct2.X,
+		Y2:  sigmaProof.ct2.Y,
+	}
+
+	return json.Marshal(&newJSON)
+}
+
+// Persist store the proof to a file.
+func (sigmaProof *SigmaProof) Persist(path string) {
+	data, err := json.Marshal(sigmaProof)
+	if err != nil {
+		panic(err)
+	}
+
+	WriteToFile(data, path)
+}
+
 // SigmaSys .
 type SigmaSys struct {
 	// TestFlag means generation is for a test purpose(if set true).
