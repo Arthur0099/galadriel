@@ -59,6 +59,11 @@ func NewECPointByString(s string, curve elliptic.Curve) *ECPoint {
 	return NewEmptyECPoint(curve).ScalarBaseMult(scalar)
 }
 
+// NewECPointByBytes takes bytes as input and returns a ecpoint on curve.
+func NewECPointByBytes(data []byte, curve elliptic.Curve) *ECPoint {
+	return NewEmptyECPoint(curve).ScalarBaseMult(new(big.Int).SetBytes(data))
+}
+
 // NewEmptyECPoint creates instance of ec point without x or y point.
 // But set the curve.(X, Y will be set to 0)
 func NewEmptyECPoint(curve elliptic.Curve) *ECPoint {

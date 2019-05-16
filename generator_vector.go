@@ -3,6 +3,7 @@ package pgc
 import (
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -15,6 +16,11 @@ type GeneratorVector struct {
 	vector []*ECPoint
 	// for convinence.
 	Curve elliptic.Curve
+}
+
+// MarshalJSON defines custom way to json.
+func (gv *GeneratorVector) MarshalJSON() ([]byte, error) {
+	return json.Marshal(gv.vector)
 }
 
 // NewGeneratorVector creates GeneratorVector instance.
@@ -46,6 +52,37 @@ func NewRandomGeneratorVector(curve elliptic.Curve, n int) *GeneratorVector {
 
 		x, y := curve.ScalarBaseMult(tmp.Bytes())
 		g.vector = append(g.vector, NewECPoint(x, y, curve))
+	}
+
+	return &g
+}
+
+// NewDefaultGV creates default g vector.
+func NewDefaultGV(curve elliptic.Curve, n int) *GeneratorVector {
+	g := GeneratorVector{}
+
+	for i := 0; i < n; i++ {
+
+		scalar, err := ComputeChallenge(curve.Params().N, new(big.Int).SetUint64(uint64(i)))
+		if err != nil {
+			panic(err)
+		}
+		g.vector = append(g.vector, NewECPointByBytes(scalar.Bytes(), curve))
+	}
+
+	return &g
+}
+
+// NewDefaultHV creates default h vector.
+func NewDefaultHV(curve elliptic.Curve, n int) *GeneratorVector {
+	g := GeneratorVector{}
+
+	for i := 0; i < n; i++ {
+		scalar, err := ComputeChallenge(curve.Params().N, new(big.Int).SetUint64(uint64(i+n)))
+		if err != nil {
+			panic(err)
+		}
+		g.vector = append(g.vector, NewECPointByBytes(scalar.Bytes(), curve))
 	}
 
 	return &g

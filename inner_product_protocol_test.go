@@ -1,17 +1,17 @@
 package pgc
 
 import (
-	"math/big"
+	"encoding/json"
 	"testing"
 )
 
 func TestInnerProductProtocol(t *testing.T) {
 	// create public params for test.
-	curve := S256()
-	n := 8
+	curve := BN256()
+	n := 16
 	order := curve.Params().N
-	g := NewRandomGeneratorVector(curve, n)
-	h := NewRandomGeneratorVector(curve, n)
+	g := NewDefaultGV(curve, n)
+	h := NewDefaultHV(curve, n)
 
 	a := NewRandomFieldVector(order, n)
 	b := NewRandomFieldVector(order, n)
@@ -21,12 +21,8 @@ func TestInnerProductProtocol(t *testing.T) {
 	pb := h.Commit(b.GetVector())
 	p := new(ECPoint).Add(pa, pb)
 
-	random := new(big.Int).SetUint64(1000)
-	ux, uy := curve.ScalarBaseMult(random.Bytes())
-	u := NewECPoint(ux, uy, curve)
-
 	prover := IPProver{}
-	prover.U = u
+	prover.U = Params().GetU()
 
 	proof, err := prover.GenerateIPProof(g.Copy(), h.Copy(), p, c, a, b)
 	if err != nil {
@@ -35,8 +31,26 @@ func TestInnerProductProtocol(t *testing.T) {
 	}
 
 	verifier := IPVerifier{}
-	verifier.U = u
+	verifier.U = Params().GetU()
 	if !verifier.VerifyIPProof(g.Copy(), h.Copy(), p, c, proof) {
 		t.Error("verify failed")
 	}
+
+	newJSON := struct {
+		P     *ECPoint `json:"p"`
+		C     string   `json:"c"`
+		Proof *IPProof `json:"proof"`
+	}{
+		P:     p.Copy(),
+		C:     c.String(),
+		Proof: proof,
+	}
+
+	data, err := json.Marshal(&newJSON)
+	if err != nil {
+		panic(err)
+	}
+
+	path := "solidity/proofs/ipProof"
+	WriteToFile(data, path)
 }

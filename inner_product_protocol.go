@@ -1,6 +1,7 @@
 package pgc
 
 import (
+	"encoding/json"
 	"errors"
 	"math/big"
 
@@ -12,6 +13,23 @@ type IPProof struct {
 	L, R []*ECPoint
 
 	a, b *big.Int
+}
+
+// MarshalJSON defines custom way to json.
+func (ipProof *IPProof) MarshalJSON() ([]byte, error) {
+	newJSON := struct {
+		L []*ECPoint `json:"l"`
+		R []*ECPoint `json:"r"`
+		A string     `json:"a"`
+		B string     `json:"b"`
+	}{
+		L: ipProof.L,
+		R: ipProof.R,
+		A: ipProof.a.String(),
+		B: ipProof.b.String(),
+	}
+
+	return json.Marshal(&newJSON)
 }
 
 // NewIPProof creates instance of inner product proof.
@@ -178,7 +196,6 @@ func (ipVerifier *IPVerifier) verifyIPProof(g, h *GeneratorVector, u, p *ECPoint
 			log.Warn("IPVerifier compute challenge failed in protocol 2", "error", err)
 			return false
 		}
-
 		eInverse := new(big.Int).ModInverse(e, n)
 
 		gPrime := gLeft.HadamardScalar(eInverse).AddGeneratorVector(gRight.HadamardScalar(e))
