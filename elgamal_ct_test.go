@@ -21,7 +21,7 @@ func TestCT(t *testing.T) {
 		t.Error("encrypt data failed", err)
 	}
 
-	newMsg := sys.Decrypt(key, ct)
+	newMsg := sys.Decrypt(key, ct.CopyPublicPoint())
 	if !bytes.Equal(msg, newMsg) {
 		t.Error("encrypt/decrypt msg not equal")
 	}

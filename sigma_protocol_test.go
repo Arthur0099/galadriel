@@ -93,6 +93,10 @@ func TestSigmaProtocol(t *testing.T) {
 
 type dleSigmaProofTest struct {
 	Proof  *DLESigmaProof `json:"proof"`
+	G1     *ECPoint       `json:"g1"`
+	H1     *ECPoint       `json:"h1"`
+	G2     *ECPoint       `json:"g2"`
+	H2     *ECPoint       `json:"h2"`
 	Expect bool           `json:"expect"`
 }
 
@@ -141,19 +145,23 @@ func TestDLESigmaProof(t *testing.T) {
 
 		prover := DLESigmaProver{}
 		prover.params = Params()
-		proof, err := prover.GenerateProof(ct1, ct2, key)
+		proof, err := prover.GenerateProof(ct1.CopyPublicPoint(), ct2.CopyPublicPoint(), key)
 		if err != nil {
 			t.Error("generate proof failed")
 			return
 		}
 
-		if VerifyDLESigmaProof(proof) != test.Expect {
+		if VerifyDLESigmaProof(ct1.CopyPublicPoint(), ct2.CopyPublicPoint(), &key.PublicKey, proof) != test.Expect {
 			t.Error(i, "dlesigma proof verify except %v, actual %c", test.Expect, !test.Expect)
 			continue
 		}
 
 		proofTest := dleSigmaProofTest{}
 		proofTest.Proof = proof
+		proofTest.G1 = new(ECPoint).Sub(ct2.CopyPublicPoint().Y, ct1.CopyPublicPoint().Y)
+		proofTest.H1 = new(ECPoint).Sub(ct2.CopyPublicPoint().X, ct1.CopyPublicPoint().X)
+		proofTest.G2 = Params().GetH()
+		proofTest.H2 = new(ECPoint).SetFromPublicKey(&key.PublicKey)
 		proofTest.Expect = test.Expect
 		proofTestes = append(proofTestes, &proofTest)
 	}

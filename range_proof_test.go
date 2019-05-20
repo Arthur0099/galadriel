@@ -26,16 +26,13 @@ func TestRangeProof(t *testing.T) {
 	p := new(ECPoint).ScalarMult(g, v)
 	p.Add(p, new(ECPoint).ScalarMult(h, r))
 
-	prover := RangeProver{}
-	proof, err := prover.GenerateRangeProof(vb, v, r)
+	proof, err := GenerateRangeProof(vb, v, r)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	verifier := RangeProofVerifier{}
-
-	if !verifier.VerifyRangeProof(vb, p, proof) {
+	if !VerifyRangeProof(vb, p, proof) {
 		t.Error("failed")
 		return
 	}

@@ -290,7 +290,7 @@ func (dleProof *DLESigmaProof) Persist(path string) {
 }
 
 // GenerateProof generates zero knowledge proof to prove two ciphertexts encrypt the same value under same public key.
-func (dleProver *DLESigmaProver) GenerateProof(ori, refresh *TwistedELGamalCT, sk *ecdsa.PrivateKey) (*DLESigmaProof, error) {
+func (dleProver *DLESigmaProver) GenerateProof(ori, refresh *CTEncPoint, sk *ecdsa.PrivateKey) (*DLESigmaProof, error) {
 	// g1 = Y(fresh) - Y(ori)
 	g1 := new(ECPoint).Sub(refresh.Y, ori.Y)
 	// h1 = X(fresh) - X(ori)
@@ -334,16 +334,25 @@ func (dleProver *DLESigmaProver) generateProof(g1, h1, g2, h2 *ECPoint, w *big.I
 	proof.A1 = A1
 	proof.A2 = A2
 	proof.Z = z
-	proof.G1 = g1
-	proof.H1 = h1
-	proof.G2 = g2
-	proof.H2 = h2
 
 	return proof, nil
 }
 
 // VerifyDLESigmaProof verify the proof is valid or not.
-func VerifyDLESigmaProof(proof *DLESigmaProof) bool {
+func VerifyDLESigmaProof(ori, refresh *CTEncPoint, pk *ecdsa.PublicKey, proof *DLESigmaProof) bool {
+	// g1 = Y(fresh) - Y(ori)
+	g1 := new(ECPoint).Sub(refresh.Y, ori.Y)
+	// h1 = X(fresh) - X(ori)
+	h1 := new(ECPoint).Sub(refresh.X, ori.X)
+	// g2 = G base point.
+	g2 := Params().GetH()
+	// h2 = pk.
+	h2 := new(ECPoint).SetFromPublicKey(pk)
+
+	return verifyDLESigmaProof(g1, h1, g2, h2, proof)
+}
+
+func verifyDLESigmaProof(g1, h1, g2, h2 *ECPoint, proof *DLESigmaProof) bool {
 	curve := proof.A1.Curve
 
 	e, err := ComputeChallenge(curve.Params().N, proof.A1.X, proof.A1.Y, proof.A2.X, proof.A2.Y)
@@ -352,11 +361,11 @@ func VerifyDLESigmaProof(proof *DLESigmaProof) bool {
 	}
 
 	// check g1 * z == A1 + h1 * e.
-	if !checkDLESigmaProof(proof.G1, proof.A1, proof.H1, proof.Z, e) {
+	if !checkDLESigmaProof(g1, proof.A1, h1, proof.Z, e) {
 		return false
 	}
 	// check g2 * z == A2 + h2 * e.
-	if !checkDLESigmaProof(proof.G2, proof.A2, proof.H2, proof.Z, e) {
+	if !checkDLESigmaProof(g2, proof.A2, h2, proof.Z, e) {
 		return false
 	}
 

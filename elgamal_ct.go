@@ -20,6 +20,24 @@ type CTEncPoint struct {
 	X, Y *ECPoint
 }
 
+// Sub .
+func (c *CTEncPoint) Sub(first, second *CTEncPoint) *CTEncPoint {
+	ecPoints := CTEncPoint{}
+
+	ecPoints.X = new(ECPoint).Sub(first.X, second.X)
+	ecPoints.Y = new(ECPoint).Sub(first.Y, second.Y)
+	return &ecPoints
+}
+
+// Copy .
+func (c *CTEncPoint) Copy() *CTEncPoint {
+	ecPoints := CTEncPoint{}
+
+	ecPoints.X = c.X.Copy()
+	ecPoints.Y = c.Y.Copy()
+	return &ecPoints
+}
+
 // PublicKey represents a public key used in twisted elgamal.
 type PublicKey struct {
 	elliptic.Curve
@@ -53,6 +71,32 @@ func (ct *TwistedELGamalCT) CopyPublicPoint() *CTEncPoint {
 	ecPoints.X = ct.X.Copy()
 	ecPoints.Y = ct.Y.Copy()
 	return &ecPoints
+}
+
+// Sub return new instance = first - second.
+func (ct *TwistedELGamalCT) Sub(first, second *TwistedELGamalCT) *TwistedELGamalCT {
+	ct.X = new(ECPoint).Sub(first.X, second.X)
+	ct.Y = new(ECPoint).Sub(first.Y, second.Y)
+	ct.R = nil
+	ct.EncMsg = []byte{}
+
+	return ct
+}
+
+// Copy returns new instance.
+func (ct *TwistedELGamalCT) Copy() *TwistedELGamalCT {
+	newCT := TwistedELGamalCT{}
+	newCT.X = ct.X.Copy()
+	newCT.Y = ct.Y.Copy()
+	if ct.R != nil {
+		newCT.R = new(big.Int).Set(ct.R)
+	}
+	if len(ct.EncMsg) > 0 {
+		newCT.EncMsg = make([]byte, len(ct.EncMsg))
+		copy(newCT.EncMsg, ct.EncMsg)
+	}
+
+	return &newCT
 }
 
 // copy from crypto/ecdsa.
@@ -149,7 +193,12 @@ func (twELGSys *TwistedELGamalSystem) Encrypt(pk *ecdsa.PublicKey, msg []byte) (
 }
 
 // Decrypt decrypts msg in twisted elgamal way.
-func (twELGSys *TwistedELGamalSystem) Decrypt(sk *ecdsa.PrivateKey, ct *TwistedELGamalCT) []byte {
+func (twELGSys *TwistedELGamalSystem) Decrypt(sk *ecdsa.PrivateKey, ct *CTEncPoint) []byte {
+	encodedMsg := twELGSys.getEncryptedMsg(sk, ct.Copy())
+	return twELGSys.decryptEncodedMsg(encodedMsg)
+}
+
+func (twELGSys *TwistedELGamalSystem) getEncryptedMsg(sk *ecdsa.PrivateKey, ct *CTEncPoint) *ECPoint {
 	// get public curve.
 	curve := sk.PublicKey.Curve
 	// compute the inverse of sk.
@@ -161,7 +210,7 @@ func (twELGSys *TwistedELGamalSystem) Decrypt(sk *ecdsa.PrivateKey, ct *TwistedE
 	encodedMsg := ct.Y.Sub(ct.Y, ct.X)
 	log.Debug("decrypt msg(g^m)", "x", encodedMsg.X, "y", encodedMsg.Y)
 
-	return twELGSys.decryptEncodedMsg(encodedMsg)
+	return encodedMsg
 }
 
 // Decryptencodedmsg decrypts and returns original bytes of msg.
@@ -179,4 +228,42 @@ func (twELGSys *TwistedELGamalSystem) decryptEncodedMsg(encodeMsg *ECPoint) []by
 	}
 
 	return []byte{}
+}
+
+// Refresh Ciphertext refreshing algorithm: output a fresh ciphertext for the message encrypted in CT.
+func (twELGSys *TwistedELGamalSystem) Refresh(sk *ecdsa.PrivateKey, ct *CTEncPoint) (*TwistedELGamalCT, error) {
+	// get encrypted msg.
+	encodedMsg := twELGSys.getEncryptedMsg(sk, ct.Copy())
+	// encrypt.
+	pk := sk.PublicKey
+	refreshCT := new(TwistedELGamalCT)
+	refreshCT.X = NewEmptyECPoint(pk.Curve)
+	refreshCT.Y = NewEmptyECPoint(pk.Curve)
+
+	// set curve
+	curve := pk.Curve
+
+	// get random.
+	r, err := rand.Int(rand.Reader, curve.Params().N)
+	if err != nil {
+		return nil, err
+	}
+	// for sigma proof purpose.
+	refreshCT.R = new(big.Int).Set(r)
+	// don't set the msg.
+
+	// compute pk * r.(pk ^ r)
+	refreshCT.X.SetFromPublicKey(&pk)
+	refreshCT.X.ScalarMult(refreshCT.X, r)
+
+	// set g * m.(g ^ m)
+	refreshCT.Y = encodedMsg.Copy()
+	log.Debug("refresh encoded msg", "x", refreshCT.Y.X, "y", refreshCT.Y.Y)
+	// compute h * r.(h ^ r)
+	h := twELGSys.params.GetH()
+	s2X, s2Y := curve.ScalarMult(h.X, h.Y, r.Bytes())
+	// compute g * m + h * r.
+	refreshCT.Y.Add(refreshCT.Y, NewECPoint(s2X, s2Y, curve))
+
+	return refreshCT, nil
 }

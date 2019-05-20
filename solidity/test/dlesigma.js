@@ -20,14 +20,14 @@ contract("dle proof verifier", function(accounts) {
       points.push(proof.A1.Y);
       points.push(proof.A2.X);
       points.push(proof.A2.Y);
-      points.push(proof.g1.X);
-      points.push(proof.g1.Y);
-      points.push(proof.h1.X);
-      points.push(proof.h1.Y);
-      points.push(proof.g2.X);
-      points.push(proof.g2.Y);
-      points.push(proof.h2.X);
-      points.push(proof.h2.Y);
+      points.push(proofTest.g1.X);
+      points.push(proofTest.g1.Y);
+      points.push(proofTest.h1.X);
+      points.push(proofTest.h1.Y);
+      points.push(proofTest.g2.X);
+      points.push(proofTest.g2.Y);
+      points.push(proofTest.h2.X);
+      points.push(proofTest.h2.Y);
       let res = await this.ContractIns.verifyDLESigmaProof(points, proof.Z);
       assert.equal(res, proofTest.expect, "dlesigma proof verify failed");
 

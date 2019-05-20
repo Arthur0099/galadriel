@@ -50,7 +50,7 @@ func (rangeProof *RangeProof) MarshalJSON() ([]byte, error) {
 }
 
 // GenerateRangeProof generates proof to prove v in certain range without revealing it.
-func (rp *RangeProver) GenerateRangeProof(vb *VectorBase, v, random *big.Int) (*RangeProof, error) {
+func GenerateRangeProof(vb *VectorBase, v, random *big.Int) (*RangeProof, error) {
 	size := vb.GetVectorSize()
 	n := vb.GetCurve().Params().N
 
@@ -217,11 +217,8 @@ func (rp *RangeProver) GenerateRangeProof(vb *VectorBase, v, random *big.Int) (*
 	return &proof, nil
 }
 
-type RangeProofVerifier struct {
-}
-
 // VerifyRangeProof validates a range proof.
-func (rpv *RangeProofVerifier) VerifyRangeProof(vb *VectorBase, v *ECPoint, proof *RangeProof) bool {
+func VerifyRangeProof(vb *VectorBase, v *ECPoint, proof *RangeProof) bool {
 	curve := vb.GetCurve()
 	n := curve.Params().N
 	size := vb.GetVectorSize()
