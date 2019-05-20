@@ -2,6 +2,7 @@ package pgc
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"math/big"
 
@@ -23,10 +24,34 @@ type RangeProof struct {
 	ipProof *IPProof
 }
 
+// MarshalJSON defines custom way to json.
+func (rangeProof *RangeProof) MarshalJSON() ([]byte, error) {
+	newJSON := struct {
+		A          *ECPoint `json:"A"`
+		S          *ECPoint `json:"S"`
+		T1         *ECPoint `json:"T1"`
+		T2         *ECPoint `json:"T2"`
+		T          string   `json:"t"`
+		TX         string   `json:"tx"`
+		U          string   `json:"u"`
+		IPProofIns *IPProof `json:"ipProof"`
+	}{
+		A:          rangeProof.A,
+		S:          rangeProof.S,
+		T1:         rangeProof.T1,
+		T2:         rangeProof.T2,
+		T:          rangeProof.t.String(),
+		TX:         rangeProof.tx.String(),
+		U:          rangeProof.u.String(),
+		IPProofIns: rangeProof.ipProof,
+	}
+
+	return json.Marshal(&newJSON)
+}
+
 // GenerateRangeProof generates proof to prove v in certain range without revealing it.
 func (rp *RangeProver) GenerateRangeProof(vb *VectorBase, v, random *big.Int) (*RangeProof, error) {
 	size := vb.GetVectorSize()
-	curve := vb.GetCurve()
 	n := vb.GetCurve().Params().N
 
 	alVector, err := BitVector(v, size)
@@ -111,10 +136,11 @@ func (rp *RangeProver) GenerateRangeProof(vb *VectorBase, v, random *big.Int) (*
 		return nil, err
 	}
 	h := vb.GetH()
+	g := vb.GetG()
 	T1 := new(ECPoint).ScalarMult(h, r1)
-	T1.Add(T1, NewEmptyECPoint(curve).ScalarBaseMult(t1))
+	T1.Add(T1, new(ECPoint).ScalarMult(g, t1))
 	T2 := new(ECPoint).ScalarMult(h, r2)
-	T2.Add(T2, NewEmptyECPoint(curve).ScalarBaseMult(t2))
+	T2.Add(T2, new(ECPoint).ScalarMult(g, t2))
 
 	// compute challenge x.
 	x, err := ComputeChallenge(n, T1.X, T1.Y, T2.X, T2.Y)
@@ -192,7 +218,6 @@ func (rp *RangeProver) GenerateRangeProof(vb *VectorBase, v, random *big.Int) (*
 }
 
 type RangeProofVerifier struct {
-	g, h *ECPoint
 }
 
 // VerifyRangeProof validates a range proof.
@@ -228,21 +253,23 @@ func (rpv *RangeProofVerifier) VerifyRangeProof(vb *VectorBase, v *ECPoint, proo
 	x2 := new(big.Int).Exp(x, new(big.Int).SetUint64(2), n)
 
 	h := vb.GetH()
+	g := vb.GetG()
 
 	// check g*tx + h*t ?= v*z^2 + g*dleta + T1*x + T2*x^2.
 	expect := new(ECPoint).ScalarMult(v, zSquare)
 	expect.Add(expect, new(ECPoint).ScalarMult(proof.T1, x))
 	expect.Add(expect, new(ECPoint).ScalarMult(proof.T2, x2))
 	dleta := Delta(y, z, n, size)
-	expect.Add(expect, NewEmptyECPoint(curve).ScalarBaseMult(dleta))
-	actual := NewEmptyECPoint(curve).ScalarBaseMult(proof.t)
+
+	expect.Add(expect, new(ECPoint).ScalarMult(g, dleta))
+	actual := new(ECPoint).ScalarMult(g, proof.t)
 	actual.Add(actual, new(ECPoint).ScalarMult(h, proof.tx))
 	if !expect.Equals(actual) {
 		log.Warn("point not equal", "expect x", expect.X, "expect y", expect.Y, "actual x", actual.X, "actual y", actual.Y)
 		return false
 	}
 
-	// compute p point. p = A + S + g*-z + h'*(z*y^n + z^2 * 2^n).
+	// compute p point. p = A + S*x + gv*-z + h'*(z*y^n + z^2 * 2^n).
 	p := proof.A.Copy()
 	p.Add(p, new(ECPoint).ScalarMult(proof.S, x))
 	p.Add(p, new(ECPoint).ScalarMult(vb.GetGV().Sum(), zNeg))

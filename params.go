@@ -27,9 +27,6 @@ type TwistedELGamalPublicParams interface {
 
 // PublicParams includes global public params used in PGC and bullet proof.
 type PublicParams struct {
-	// g, h generator used in sigma proof.
-	g, h *ECPoint
-
 	//
 	curve elliptic.Curve
 
@@ -37,11 +34,8 @@ type PublicParams struct {
 	// msg < 2^BitSize.
 	bitSize int
 
-	// g vector used in range proof.
-	gv *GeneratorVector
-
-	// h vector used in range proof.
-	hv *GeneratorVector
+	// vector base.
+	vb *VectorBase
 
 	// fix u point in inner product.
 	u *ECPoint
@@ -49,17 +43,22 @@ type PublicParams struct {
 
 // GetG returns g point.
 func (pp *PublicParams) GetG() *ECPoint {
-	return pp.g.Copy()
+	return pp.vb.g.Copy()
 }
 
 // GetH returns h point.
 func (pp *PublicParams) GetH() *ECPoint {
-	return pp.h.Copy()
+	return pp.vb.h.Copy()
 }
 
 // GetU returns u point.
 func (pp *PublicParams) GetU() *ECPoint {
 	return pp.u.Copy()
+}
+
+// GetVB returns vector base.
+func (pp *PublicParams) GetVB() *VectorBase {
+	return pp.vb
 }
 
 // BitSizeLimit returns the limit of the bit size of msg to be encrypted.
@@ -81,10 +80,10 @@ func (pp *PublicParams) MarshalJSON() ([]byte, error) {
 		HV *GeneratorVector `json:"hv"`
 		U  *ECPoint         `json:"u"`
 	}{
-		G:  pp.g,
-		H:  pp.h,
-		GV: pp.gv,
-		HV: pp.hv,
+		G:  pp.vb.g,
+		H:  pp.vb.h,
+		GV: pp.vb.gv,
+		HV: pp.vb.hv,
 		U:  pp.u,
 	}
 
@@ -103,16 +102,10 @@ func init() {
 	// todo: set config to switch curve.
 	//curve := S256()
 	curve := BN256()
-	// to be compatible with sig curve.
-	h := NewECPoint(curve.Params().Gx, curve.Params().Gy, curve)
-	g := "g generator of twisted elg"
 
-	params.g = NewECPointByString(g, curve)
-	params.h = h
-	params.u = h.Copy()
 	params.curve = curve
 	params.bitSize = 16
 
-	params.gv = NewDefaultGV(curve, params.bitSize)
-	params.hv = NewDefaultHV(curve, params.bitSize)
+	params.vb = NewDefaultVectorBase(curve, params.bitSize)
+	params.u = params.vb.h.Copy()
 }

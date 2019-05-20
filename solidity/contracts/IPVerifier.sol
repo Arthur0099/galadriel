@@ -68,6 +68,19 @@ contract IPVerifier {
     return verifyIPProofStep1(ipParams.getGVector(), ipParams.getHVector(), BN128.G1Point(p[0], p[1]), scalar[2], proof);
   }
 
+  /*
+   * @dev call by range proof.
+   * @dev Warning: hv isn't the public h vector generator.
+   */
+  function verifyIPProofWithCustomParams(BN128.G1Point[bitSize] memory gv, BN128.G1Point[bitSize] memory hv, BN128.G1Point memory p, uint c, BN128.G1Point[n] memory l, BN128.G1Point[n] memory r, uint a, uint b) public view returns(bool) {
+    IPProof memory proof;
+    proof.l = l;
+    proof.r = r;
+    proof.a = a;
+    proof.b = b;
+    return verifyIPProofStep1(gv, hv, p, c, proof);
+  }
+
 
   function verifyIPProofStep1(BN128.G1Point[bitSize] memory gv, BN128.G1Point[bitSize] memory hv, BN128.G1Point memory p, uint c, IPProof memory proof) internal view returns(bool) {
     // compute challenge e.

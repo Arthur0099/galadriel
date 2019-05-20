@@ -30,18 +30,17 @@ contract PublicParams {
   BN128.G1Point[bitSize] public hVector;
 
   constructor() public {
-    // set alt_128 g base point to g.
-    h.X = 1;
-    h.Y = 2;
-    // set u same with h.
-    u.X = h.X;
-    u.Y = h.Y;
-
     // set h generator.
+    // this should be the first step to set which will be used to
+    // generate generator point.
     gBase.X = 1;
     gBase.Y = 2;
 
     g = generatePointByString("g generator of twisted elg");
+    h = generatePointByString("h generator of twisted elg");
+    // set u same with h.
+    u.X = h.X;
+    u.Y = h.Y;
 
     initVector();
   }
