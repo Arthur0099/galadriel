@@ -38,6 +38,9 @@ contract IPVerifier {
   struct Board {
     BN128.G1Point[bitSize] hv;
     BN128.G1Point[bitSize] gv;
+
+    uint[n] challenges;
+    uint[n] challengesInverse;
   }
 
   constructor(address params) public {
@@ -48,6 +51,7 @@ contract IPVerifier {
     u.X = tmpU.X;
     u.Y = tmpU.Y;
   }
+
 
   /*
    * @dev verify inner product proof.
@@ -82,17 +86,60 @@ contract IPVerifier {
   }
 
 
-  function verifyIPProofStep1(BN128.G1Point[bitSize] memory gv, BN128.G1Point[bitSize] memory hv, BN128.G1Point memory p, uint c, IPProof memory proof) internal view returns(bool) {
+  function verifyIPProofStep1(BN128.G1Point[bitSize] memory gv, BN128.G1Point[bitSize] memory hv, BN128.G1Point memory p, uint c, IPProof memory proof) internal view  returns(bool) {
     // compute challenge e.
-    uint e = computeChallengeStep1(p.X, p.Y, c);
+    uint e = computeChallengeStep1(c);
 
     BN128.G1Point memory ue = u.mul(e);
 
-    return verifyIPProofStep2(gv, hv, ue, ue.mul(c).add(p), proof);
+    return verifyIPProofMulti(gv, hv, ue, ue.mul(c).add(p), proof);
+  }
+
+
+  function verifyIPProofMulti(BN128.G1Point[bitSize] memory gv, BN128.G1Point[bitSize] memory hv, BN128.G1Point memory newU, BN128.G1Point memory p, IPProof memory proof) internal view  returns(bool) {
+    Board memory b;
+    // compute formula on the right.
+    // compute p + li * xi^2 + ri * xi^-2.
+    for (uint i = 0; i < n; i++) {
+      uint x = computeChallengeStep2(proof.l[i].X, proof.l[i].Y, proof.r[i].X, proof.r[i].Y);
+      uint xInverse = x.inv();
+      b.challenges[i] = x;
+      b.challengesInverse[i] = xInverse;
+      p = p.add(proof.l[i].mul(x.mul(x))).add(proof.r[i].mul(xInverse.mul(xInverse)));
+    }
+
+    // compute formula on the left.
+    // compute g*s*a + h*s^-1*b + u*a*b.
+
+    // compute s.
+    uint[bitSize] memory s;
+    for (uint i = 0; i < bitSize; i++) {
+      for (uint j = 0; j < n; j++) {
+        uint tmp;
+
+        if (smallParseBinary(i, j, n)) {
+          tmp = b.challenges[j];
+        } else {
+          tmp = b.challengesInverse[j];
+        }
+
+        if (j == 0) {
+          s[i] = tmp;
+        } else {
+          s[i] = s[i].mul(tmp).mod();
+        }
+      }
+
+    }
+
+    BN128.G1Point memory left;
+    left = multiExp(gv, s).mul(proof.a).add(multiExpInverse(hv, s).mul(proof.b)).add(newU.mul(proof.a.mul(proof.b)));
+
+    return left.X == p.X && left.Y == p.Y;
   }
 
   //
-  function verifyIPProofStep2(BN128.G1Point[bitSize] memory gv, BN128.G1Point[bitSize] memory hv, BN128.G1Point memory newU, BN128.G1Point memory p, IPProof memory proof) internal view returns(bool) {
+  function verifyIPProofStep2(BN128.G1Point[bitSize] memory gv, BN128.G1Point[bitSize] memory hv, BN128.G1Point memory newU, BN128.G1Point memory p, IPProof memory proof) internal view  returns(bool) {
 
     Board memory b;
     uint step = 2;
@@ -106,6 +153,7 @@ contract IPVerifier {
       for (uint j = 0; j < bitSize/step; j++) {
         // compute gv prime.
         b.gv[j] = b.gv[j].mul(eInverse).add(b.gv[bitSize/step+j].mul(e));
+
         // compute hv prime.
         b.hv[j] = b.hv[j].mul(e).add(b.hv[bitSize/step+j].mul(eInverse));
       }
@@ -122,14 +170,48 @@ contract IPVerifier {
 
     // want = gv[0]*a + hv[0]*b + u*c.
     BN128.G1Point memory want = newU.mul(c).add(b.gv[0].mul(proof.a)).add(b.hv[0].mul(proof.b));
+
     return p.X == want.X && p.Y == want.Y;
   }
 
-  function computeChallengeStep1(uint a, uint b, uint c) internal view returns(uint) {
-    return uint(keccak256(abi.encodePacked(a, b, c))).mod();
+  function computeChallengeStep1(uint a) internal view returns(uint) {
+    return uint(keccak256(abi.encodePacked(a))).mod();
   }
 
   function computeChallengeStep2(uint a, uint b, uint c, uint d) internal view returns(uint) {
     return uint(keccak256(abi.encodePacked(a, b, c, d))).mod();
+  }
+
+  function smallParseBinary(uint n, uint j, uint size) internal view returns(bool) {
+    uint w = 1 << (size - 1);
+
+    for (uint i=0; i < j; i++) {
+      w = w >> 1;
+    }
+
+    if ((n&w) != 0) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function multiExp(BN128.G1Point[bitSize] memory base, uint[bitSize] memory exp) internal view returns(BN128.G1Point memory) {
+    BN128.G1Point memory res;
+    res = base[0].mul(exp[0]);
+    for (uint i = 1; i < bitSize; i++) {
+      res = res.add(base[i].mul(exp[i]));
+    }
+
+    return res;
+  }
+
+  function multiExpInverse(BN128.G1Point[bitSize] memory base, uint[bitSize] memory exp) internal view returns(BN128.G1Point memory) {
+    uint[bitSize] memory expInverse;
+    for (uint i = 0; i < bitSize; i++) {
+      expInverse[i] = exp[i].inv();
+    }
+
+    return multiExp(base, expInverse);
   }
 }

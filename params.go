@@ -36,9 +36,6 @@ type PublicParams struct {
 
 	// vector base.
 	vb *VectorBase
-
-	// fix u point in inner product.
-	u *ECPoint
 }
 
 // GetG returns g point.
@@ -53,7 +50,7 @@ func (pp *PublicParams) GetH() *ECPoint {
 
 // GetU returns u point.
 func (pp *PublicParams) GetU() *ECPoint {
-	return pp.u.Copy()
+	return pp.vb.u.Copy()
 }
 
 // GetVB returns vector base.
@@ -84,7 +81,7 @@ func (pp *PublicParams) MarshalJSON() ([]byte, error) {
 		H:  pp.vb.h,
 		GV: pp.vb.gv,
 		HV: pp.vb.hv,
-		U:  pp.u,
+		U:  pp.vb.u,
 	}
 
 	return json.Marshal(&newJSON)
@@ -107,5 +104,4 @@ func init() {
 	params.bitSize = 16
 
 	params.vb = NewDefaultVectorBase(curve, params.bitSize)
-	params.u = params.vb.h.Copy()
 }

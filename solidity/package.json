@@ -10,10 +10,12 @@
     "babel-preset-stage-3": "^6.24.1",
     "babel-register": "^6.26.0",
     "chai": "^4.2.0",
-    "es2015": "0.0.0"
+    "es2015": "0.0.0",
+    "babel-core": "^6.26.3",
+    "openzeppelin-test-helpers": "^0.1.5"
   },
   "devDependencies": {
-    "babel-core": "^6.26.0",
+    "babel-core": "^6.26.3",
     "openzeppelin-test-helpers": "^0.1.5"
   }
 }

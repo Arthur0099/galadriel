@@ -39,8 +39,8 @@ contract PublicParams {
     g = generatePointByString("g generator of twisted elg");
     h = generatePointByString("h generator of twisted elg");
     // set u same with h.
-    u.X = h.X;
-    u.Y = h.Y;
+    u.X = g.X;
+    u.Y = g.Y;
 
     initVector();
   }

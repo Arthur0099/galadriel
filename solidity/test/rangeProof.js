@@ -52,5 +52,6 @@ contract("range proof", function(account){
     assert.equal(res, true, "failed");
     let gasCost = await this.RangeProofVerifierIns.verifyRangeProof.estimateGas(points, scalar, l, r);
     console.log("when veriry is " + res + ", gas cost " + gasCost);
+    //assert.equal(false, true, "t");
   });
 });

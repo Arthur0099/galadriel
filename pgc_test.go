@@ -6,13 +6,13 @@ import (
 )
 
 func TestPGC(t *testing.T) {
-	aliceBalance := new(big.Int).SetUint64(100)
+	aliceBalance := new(big.Int).SetUint64(12)
 	alice := CreateTestAccount("alice", aliceBalance)
 
-	bobBalance := new(big.Int).SetUint64(200)
+	bobBalance := new(big.Int).SetUint64(12)
 	bob := CreateTestAccount("bob", bobBalance)
 
-	transferBalance := new(big.Int).SetUint64(20)
+	transferBalance := new(big.Int).SetUint64(2)
 
 	ctx, err := CreateCTX(alice, bob, transferBalance)
 	if err != nil {
@@ -23,5 +23,12 @@ func TestPGC(t *testing.T) {
 	if !VerifyCTX(ctx) {
 		t.Error("verify valid tx failed")
 		return
+	}
+
+	sys := NewTwistedELGamalSystem()
+	balanceAfter := new(big.Int).SetBytes(sys.Decrypt(alice.sk, alice.balance))
+	except := new(big.Int).Sub(aliceBalance, transferBalance)
+	if except.Cmp(balanceAfter) != 0 {
+		t.Error("balance after not correct")
 	}
 }

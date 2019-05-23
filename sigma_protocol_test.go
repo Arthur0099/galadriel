@@ -2,6 +2,7 @@ package pgc
 
 import (
 	"encoding/json"
+	"math/big"
 	"testing"
 )
 
@@ -31,14 +32,14 @@ func TestSigmaProtocol(t *testing.T) {
 		Flag   bool
 	}{
 		{
-			MsgA:   []byte("hh"),
-			MsgB:   []byte("hh"),
+			MsgA:   new(big.Int).SetUint64(2).Bytes(),
+			MsgB:   new(big.Int).SetUint64(2).Bytes(),
 			Expect: true,
 			Flag:   false,
 		},
 		{
-			MsgA:   []byte("a"),
-			MsgB:   []byte("b"),
+			MsgA:   new(big.Int).SetUint64(1).Bytes(),
+			MsgB:   new(big.Int).SetUint64(2).Bytes(),
 			Expect: false,
 			Flag:   true,
 		},
@@ -114,13 +115,13 @@ func TestDLESigmaProof(t *testing.T) {
 		Expect bool
 	}{
 		{
-			MsgA:   []byte("hh"),
-			MsgB:   []byte("hh"),
+			MsgA:   new(big.Int).SetUint64(2).Bytes(),
+			MsgB:   new(big.Int).SetUint64(2).Bytes(),
 			Expect: true,
 		},
 		{
-			MsgA:   []byte("aa"),
-			MsgB:   []byte("bb"),
+			MsgA:   new(big.Int).SetUint64(2).Bytes(),
+			MsgB:   new(big.Int).SetUint64(1).Bytes(),
 			Expect: false,
 		},
 	}

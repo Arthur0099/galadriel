@@ -249,11 +249,6 @@ type DLESigmaProof struct {
 	A2 *ECPoint
 
 	Z *big.Int
-
-	G1 *ECPoint
-	H1 *ECPoint
-	G2 *ECPoint
-	H2 *ECPoint
 }
 
 // MarshalJSON defines custom method to json.
@@ -262,18 +257,10 @@ func (dleProof *DLESigmaProof) MarshalJSON() ([]byte, error) {
 		A1 *ECPoint `json:"A1"`
 		A2 *ECPoint `Json:"A2"`
 		Z  string   `json:"Z"`
-		G1 *ECPoint `json:"g1"`
-		H1 *ECPoint `json:"h1"`
-		G2 *ECPoint `json:"g2"`
-		H2 *ECPoint `json:"h2"`
 	}{
 		A1: dleProof.A1,
 		A2: dleProof.A2,
 		Z:  dleProof.Z.String(),
-		G1: dleProof.G1,
-		H1: dleProof.H1,
-		G2: dleProof.G2,
-		H2: dleProof.H2,
 	}
 
 	return json.Marshal(&newJSON)

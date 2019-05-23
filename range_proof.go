@@ -199,7 +199,7 @@ func GenerateRangeProof(vb *VectorBase, v, random *big.Int) (*RangeProof, error)
 	newP := p.Sub(p, new(ECPoint).ScalarMult(vb.GetH(), u))
 
 	ipProver := IPProver{}
-	ipProver.U = vb.GetH()
+	ipProver.U = vb.GetU()
 	ipProof, err := ipProver.GenerateIPProof(vb.GetGV(), hPrime, newP, t, l, r)
 	if err != nil {
 		return nil, err
@@ -277,7 +277,7 @@ func VerifyRangeProof(vb *VectorBase, v *ECPoint, proof *RangeProof) bool {
 	newP := p.Sub(p, new(ECPoint).ScalarMult(vb.GetH(), proof.u))
 
 	ipVerifier := IPVerifier{}
-	ipVerifier.U = vb.GetH()
+	ipVerifier.U = vb.GetU()
 
 	return ipVerifier.VerifyIPProof(vb.GetGV(), hPrime, newP, proof.t, proof.ipProof)
 }

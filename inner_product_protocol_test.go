@@ -8,7 +8,7 @@ import (
 func TestInnerProductProtocol(t *testing.T) {
 	// create public params for test.
 	curve := BN256()
-	n := 16
+	n := Params().BitSizeLimit()
 	order := curve.Params().N
 	g := NewDefaultGV(curve, n)
 	h := NewDefaultHV(curve, n)

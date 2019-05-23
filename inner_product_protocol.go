@@ -62,10 +62,11 @@ func (ipProver *IPProver) GenerateIPProof(g, h *GeneratorVector, p *ECPoint, c *
 	curve := p.Curve
 	n := curve.Params().N
 	// todo:
-	e, err := ComputeChallenge(n, p.X, p.Y, c)
+	e, err := ComputeChallenge(n, c)
 	if err != nil {
 		return nil, err
 	}
+	log.Debug("challenge", "xu", e)
 
 	// compute newPoint.
 	// p' = p + u * (e * c)
@@ -163,7 +164,7 @@ func (ipVerifier *IPVerifier) VerifyIPProof(g, h *GeneratorVector, p *ECPoint, c
 	curve := p.Curve
 	n := curve.Params().N
 	// todo:
-	e, err := ComputeChallenge(n, p.X, p.Y, c)
+	e, err := ComputeChallenge(n, c)
 	if err != nil {
 		log.Warn("IPVerifier compute challenge failed in protocol 1", "error", err)
 		return false

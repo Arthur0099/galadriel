@@ -7,8 +7,8 @@ import (
 
 // VectorBase represent public vector params used in protocol.
 type VectorBase struct {
-	gv, hv *GeneratorVector
-	g, h   *ECPoint
+	gv, hv  *GeneratorVector
+	g, h, u *ECPoint
 }
 
 // NewVecotrBase creates new instance.
@@ -29,6 +29,7 @@ func NewRandomVectorBase(curve elliptic.Curve, size int) *VectorBase {
 	vb.hv = NewRandomGeneratorVector(curve, size)
 	vb.h = NewRandomECPoint(curve)
 	vb.g = NewRandomECPoint(curve)
+	vb.u = NewRandomECPoint(curve)
 
 	return &vb
 }
@@ -44,6 +45,8 @@ func NewDefaultVectorBase(curve elliptic.Curve, size int) *VectorBase {
 	h := "h generator of twisted elg"
 	vb.h = NewECPointByString(h, curve)
 
+	vb.u = vb.g.Copy()
+
 	return &vb
 }
 
@@ -55,6 +58,11 @@ func (vb *VectorBase) GetH() *ECPoint {
 // GetG returns public g point.
 func (vb *VectorBase) GetG() *ECPoint {
 	return vb.g
+}
+
+// GetU returns public u point.
+func (vb *VectorBase) GetU() *ECPoint {
+	return vb.u
 }
 
 // GetHV returns h generator vector.

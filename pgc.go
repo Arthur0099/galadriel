@@ -2,6 +2,7 @@ package pgc
 
 import (
 	"crypto/ecdsa"
+	"encoding/json"
 	"math/big"
 
 	log "github.com/inconshreveable/log15"
@@ -21,6 +22,33 @@ type CTX struct {
 
 	//
 	senderBalance, refreshUpdatedBalance *CTEncPoint
+}
+
+// MarshalJSON defines custom way to JSON.
+func (ctx *CTX) MarshalJSON() ([]byte, error) {
+	newJSON := struct {
+		Pk1                    *ECPoint       `json:"pk1"`
+		Pk2                    *ECPoint       `json:"pk2"`
+		RangeProof1            *RangeProof    `json:"rangeProof1"`
+		RangeProof2            *RangeProof    `json:"rangeProof2"`
+		C1                     *CTEncPoint    `json:"c1"`
+		C2                     *CTEncPoint    `json:"c2"`
+		EqualityProof          *SigmaProof    `json:"equalityProof"`
+		DleProof               *DLESigmaProof `json:"dleProof"`
+		SenderBalance          *CTEncPoint    `json:"senderBalance"`
+		RefreashUpdatedBalance *CTEncPoint    `json:"refreshUpdatedBalance"`
+	}{
+		Pk1:                    new(ECPoint).SetFromPublicKey(ctx.pk1),
+		Pk2:                    new(ECPoint).SetFromPublicKey(ctx.pk2),
+		RangeProof1:            ctx.rangeProof1,
+		RangeProof2:            ctx.rangeProof2,
+		EqualityProof:          ctx.equalityProof,
+		DleProof:               ctx.dleProof,
+		SenderBalance:          ctx.senderBalance,
+		RefreashUpdatedBalance: ctx.refreshUpdatedBalance,
+	}
+
+	return json.Marshal(&newJSON)
 }
 
 // CreateCTX creates en encrypt tx for transfering v balance from

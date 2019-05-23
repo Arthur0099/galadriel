@@ -2,6 +2,7 @@ package pgc
 
 import (
 	"bytes"
+	"math/big"
 	"testing"
 )
 
@@ -14,7 +15,7 @@ func TestCT(t *testing.T) {
 	}
 
 	// Encrypt msg.
-	msg := []byte("h")
+	msg := new(big.Int).SetUint64(2).Bytes()
 	// Just use a certain r for test.
 	ct, err := sys.Encrypt(&key.PublicKey, msg)
 	if err != nil {
