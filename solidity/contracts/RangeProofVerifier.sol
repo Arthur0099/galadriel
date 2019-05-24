@@ -38,6 +38,10 @@ contract RangeProofVerifier {
   BN128.G1Point public h;
   // uBase point.
   BN128.G1Point public uBase;
+  // g vector.
+  BN128.G1Point[bitSize] public gvBase;
+  // h vector.
+  BN128.G1Point[bitSize] public hvBase;
 
   // range proof.
   struct RangeProof {
@@ -91,12 +95,21 @@ contract RangeProofVerifier {
     BN128.G1Point memory tmpG = rpParams.getG();
     BN128.G1Point memory tmpH = rpParams.getH();
     BN128.G1Point memory tmpU = rpParams.getU();
+    BN128.G1Point[bitSize] memory gv = rpParams.getGVector();
+    BN128.G1Point[bitSize] memory hv = rpParams.getHVector();
     g.X = tmpG.X;
     g.Y = tmpG.Y;
     h.X = tmpH.X;
     h.Y = tmpH.Y;
     uBase.X = tmpU.X;
     uBase.Y = tmpU.Y;
+
+    for (uint i = 0; i < gv.length; i++) {
+      gvBase[i].X = gv[i].X;
+      gvBase[i].Y = gv[i].Y;
+      hvBase[i].X = hv[i].X;
+      hvBase[i].Y = hv[i].Y;
+    }
   }
 
   /*
@@ -181,8 +194,8 @@ contract RangeProofVerifier {
    *
    */
   function optimizedVerify(BN128.G1Point memory v, RangeProof memory rangeProof) public view returns(bool) {
-    BN128.G1Point[bitSize] memory gv = rpParams.getGVector();
-    BN128.G1Point[bitSize] memory hv = rpParams.getHVector();
+    BN128.G1Point[bitSize] memory gv = getGV();
+    BN128.G1Point[bitSize] memory hv = getHV();
     Board memory board;
     // compute
     board.y = computeChallenge(rangeProof.A.X, rangeProof.A.Y, rangeProof.S.X, rangeProof.S.Y);
@@ -428,5 +441,31 @@ contract RangeProofVerifier {
     }
 
     return multiExp(base, expInverse);
+  }
+
+  /*
+   *
+   */
+  function getGV() internal view returns(BN128.G1Point[bitSize] memory) {
+    BN128.G1Point[bitSize] memory res;
+    for (uint i = 0; i < bitSize; i++) {
+      res[i].X = gvBase[i].X;
+      res[i].Y = gvBase[i].Y;
+    }
+
+    return res;
+  }
+
+  /*
+   *
+   */
+  function getHV() internal view returns(BN128.G1Point[bitSize] memory) {
+    BN128.G1Point[bitSize] memory res;
+    for (uint i = 0; i < bitSize; i++) {
+      res[i].X = hvBase[i].X;
+      res[i].Y = hvBase[i].Y;
+    }
+
+    return res;
   }
 }
