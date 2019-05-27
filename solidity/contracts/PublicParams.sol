@@ -85,12 +85,12 @@ contract PublicParams {
   }
 
   // return bit size for value.
-  function getBitSize() public view returns(uint) {
+  function getBitSize() public pure returns(uint) {
     return bitSize;
   }
 
   // return number of ecpoints in innerproduct.
-  function getN() public view returns(uint) {
+  function getN() public pure returns(uint) {
     return n;
   }
 

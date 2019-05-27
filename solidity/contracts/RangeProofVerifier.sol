@@ -281,18 +281,18 @@ contract RangeProofVerifier {
   /*
    * @dev compute [1, base, base^2, ... , base^(bitSize-1)]
    */
-  function powers(uint256 base) internal pure returns (uint256[bitSize] memory powers) {
-        powers[0] = 1;
-        powers[1] = base;
+  function powers(uint256 base) internal pure returns (uint256[bitSize] memory powersRes) {
+        powersRes[0] = 1;
+        powersRes[1] = base;
         for (uint256 i = 2; i < bitSize; i++) {
-          powers[i] = powers[i-1].mul(base).mod();
+          powersRes[i] = powersRes[i-1].mul(base).mod();
         }
     }
 
   /*
    * @dev sum []
    */
-  function sum(uint256[bitSize] memory data) internal view returns(uint) {
+  function sum(uint256[bitSize] memory data) internal pure returns(uint) {
     uint res = data[0];
     for (uint i = 1; i < bitSize; i++) {
       res = res.add(data[i]);
@@ -304,7 +304,7 @@ contract RangeProofVerifier {
   /*
    * @dev modInverse return (a1.inv, a2.inv, ..., an.inv)
    */
-  function modInverse(uint[bitSize] memory a) internal view returns(uint[bitSize] memory) {
+  function modInverse(uint[bitSize] memory a) internal pure returns(uint[bitSize] memory) {
     uint[bitSize] memory res;
     for (uint i = 0; i < bitSize; i++) {
       res[i] = a[i].inv();
@@ -352,7 +352,7 @@ contract RangeProofVerifier {
   /*
    * @dev (m1, m2, ..., mn) * scalar == (m1*scalar, m2*scalar, ..., mn*scalar)
    */
-  function times(uint[bitSize] memory m, uint scalar) internal view returns(uint[bitSize] memory) {
+  function times(uint[bitSize] memory m, uint scalar) internal pure returns(uint[bitSize] memory) {
     uint[bitSize] memory res;
     for (uint i = 0; i < bitSize; i++) {
       res[i] = m[i].mul(scalar);
@@ -362,22 +362,10 @@ contract RangeProofVerifier {
   }
 
 
-  /**
-   * @dev (m1, m2, ..., mn) + scalar = (m1+z, m2+z, ..., mn+z)
-   */
-  function addScalar(uint[bitSize] memory m, uint scalar) internal view returns(uint[bitSize] memory) {
-    uint[bitSize] memory res;
-    for (uint i = 0; i < bitSize; i++) {
-      res[i] = res[i].add(scalar).mod();
-    }
-
-    return res;
-  }
-
   /*
    * @dev add field vector(a1, ..., an) + (b1, ..., bn) == (a1+b1, ..., an+bn)
    */
-  function addFieldVector(uint[bitSize] memory a, uint[bitSize] memory b) internal view returns(uint[bitSize] memory) {
+  function addFieldVector(uint[bitSize] memory a, uint[bitSize] memory b) internal pure returns(uint[bitSize] memory) {
     uint[bitSize] memory res;
     for (uint i = 0; i < bitSize; i++) {
       res[i] = a[i].add(b[i]);
@@ -389,7 +377,7 @@ contract RangeProofVerifier {
   /*
    *
    */
-  function subFieldVector(uint[bitSize] memory a, uint[bitSize] memory b) internal view returns(uint[bitSize] memory) {
+  function subFieldVector(uint[bitSize] memory a, uint[bitSize] memory b) internal pure returns(uint[bitSize] memory) {
     uint[bitSize] memory res;
     for (uint i = 0; i < bitSize; i++) {
       res[i] = a[i].add(b[i].neg());
@@ -401,7 +389,7 @@ contract RangeProofVerifier {
   /*
    *
    */
-  function multFieldVector(uint[bitSize] memory a, uint[bitSize] memory b) internal view returns(uint[bitSize] memory) {
+  function multFieldVector(uint[bitSize] memory a, uint[bitSize] memory b) internal pure returns(uint[bitSize] memory) {
     uint[bitSize] memory res;
     for (uint i = 0; i < bitSize; i++) {
       res[i] = a[i].mul(b[i]);
@@ -410,14 +398,14 @@ contract RangeProofVerifier {
     return res;
   }
 
-  function smallParseBinary(uint n, uint j, uint size) internal view returns(bool) {
+  function smallParseBinary(uint t, uint j, uint size) internal pure returns(bool) {
     uint w = 1 << (size - 1);
 
     for (uint i=0; i < j; i++) {
       w = w >> 1;
     }
 
-    if ((n&w) != 0) {
+    if ((t&w) != 0) {
       return true;
     }
 

@@ -12,14 +12,13 @@ type sigmaProofTest struct {
 }
 
 func TestSigmaProtocol(t *testing.T) {
-	sys := NewTwistedELGamalSystem()
 	// generate key pair for alice and bob.
-	aliceKey, err := sys.GenerateKey()
+	aliceKey, err := GenerateKey()
 	if err != nil {
 		t.Error("generate key pair for alice failed", err)
 		return
 	}
-	bobKey, err := sys.GenerateKey()
+	bobKey, err := GenerateKey()
 	if err != nil {
 		t.Error("generate key pair for bob failed", err)
 		return
@@ -46,30 +45,30 @@ func TestSigmaProtocol(t *testing.T) {
 	}
 
 	proofTestes := make([]*sigmaProofTest, 0)
+	params := Params()
 
 	for i, test := range tests {
 		// msg to be encoded.
-		ct1, err := sys.Encrypt(&aliceKey.PublicKey, test.MsgA)
+		ct1, err := Encrypt(&aliceKey.PublicKey, test.MsgA)
 		if err != nil {
 			t.Error(i, "encrypt ct1 for alice failed", err)
 			continue
 		}
-		ct2, err := sys.Encrypt(&bobKey.PublicKey, test.MsgB)
+		ct2, err := Encrypt(&bobKey.PublicKey, test.MsgB)
 		if err != nil {
 			t.Error(i, "encrypt ct2 for bob failed", err)
 			continue
 		}
 
+		params.testFlag = test.Flag
 		// generate proof.
-		sigmaSys := NewSigmaSys()
-		sigmaSys.TestFlag = test.Flag
-		proof, err := sigmaSys.GenerateProof(&aliceKey.PublicKey, &bobKey.PublicKey, ct1, ct2)
+		proof, err := GenerateSigmaProof(&aliceKey.PublicKey, &bobKey.PublicKey, ct1, ct2)
 		if err != nil {
 			t.Error(i, "generate proof for sigma protocol failed", err)
 			continue
 		}
 
-		if sigmaSys.VerifySigmaProof(proof) != test.Expect {
+		if VerifySigmaProof(proof) != test.Expect {
 			t.Error(i, "sigma proof verify except %v, actual %c", test.Expect, !test.Expect)
 			continue
 		}
@@ -102,8 +101,7 @@ type dleSigmaProofTest struct {
 }
 
 func TestDLESigmaProof(t *testing.T) {
-	sys := NewTwistedELGamalSystem()
-	key, err := sys.GenerateKey()
+	key, err := GenerateKey()
 	if err != nil {
 		t.Error("key generation failed")
 		return
@@ -129,12 +127,12 @@ func TestDLESigmaProof(t *testing.T) {
 	proofTestes := make([]*dleSigmaProofTest, 0)
 
 	for i, test := range tests {
-		ct1, err := sys.Encrypt(&key.PublicKey, test.MsgA)
+		ct1, err := Encrypt(&key.PublicKey, test.MsgA)
 		if err != nil {
 			t.Error("encrypt failed")
 			return
 		}
-		ct2, err := sys.Encrypt(&key.PublicKey, test.MsgB)
+		ct2, err := Encrypt(&key.PublicKey, test.MsgB)
 		if err != nil {
 			t.Error("encrypt failed")
 			return
@@ -144,9 +142,7 @@ func TestDLESigmaProof(t *testing.T) {
 			return
 		}
 
-		prover := DLESigmaProver{}
-		prover.params = Params()
-		proof, err := prover.GenerateProof(ct1.CopyPublicPoint(), ct2.CopyPublicPoint(), key)
+		proof, err := GenerateDLESigmaProof(ct1.CopyPublicPoint(), ct2.CopyPublicPoint(), key)
 		if err != nil {
 			t.Error("generate proof failed")
 			return

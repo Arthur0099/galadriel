@@ -174,22 +174,22 @@ contract IPVerifier {
     return p.X == want.X && p.Y == want.Y;
   }
 
-  function computeChallengeStep1(uint a) internal view returns(uint) {
+  function computeChallengeStep1(uint a) internal pure returns(uint) {
     return uint(keccak256(abi.encodePacked(a))).mod();
   }
 
-  function computeChallengeStep2(uint a, uint b, uint c, uint d) internal view returns(uint) {
+  function computeChallengeStep2(uint a, uint b, uint c, uint d) internal pure returns(uint) {
     return uint(keccak256(abi.encodePacked(a, b, c, d))).mod();
   }
 
-  function smallParseBinary(uint n, uint j, uint size) internal view returns(bool) {
+  function smallParseBinary(uint t, uint j, uint size) internal pure returns(bool) {
     uint w = 1 << (size - 1);
 
     for (uint i=0; i < j; i++) {
       w = w >> 1;
     }
 
-    if ((n&w) != 0) {
+    if ((t&w) != 0) {
       return true;
     }
 

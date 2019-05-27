@@ -3,6 +3,7 @@ package pgc
 import (
 	"crypto/elliptic"
 	"encoding/json"
+	"math/big"
 )
 
 // KeyBasePoint represents the base point used in curve to generate keys.
@@ -36,6 +37,9 @@ type PublicParams struct {
 
 	// vector base.
 	vb *VectorBase
+
+	// for test purpose.
+	testFlag bool
 }
 
 // GetG returns g point.
@@ -58,9 +62,22 @@ func (pp *PublicParams) GetVB() *VectorBase {
 	return pp.vb
 }
 
+// TestFlag returns flag.
+func (pp *PublicParams) TestFlag() bool {
+	return pp.testFlag
+}
+
 // BitSizeLimit returns the limit of the bit size of msg to be encrypted.
 func (pp *PublicParams) BitSizeLimit() int {
 	return pp.bitSize
+}
+
+// Max returns max value in protocol.
+func (pp *PublicParams) Max() *big.Int {
+	two := new(big.Int).SetUint64(2)
+	size := new(big.Int).SetUint64(uint64(pp.bitSize))
+
+	return new(big.Int).Exp(two, size, nil)
 }
 
 // Curve returns ec curve used in underlying field.

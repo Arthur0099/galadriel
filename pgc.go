@@ -57,21 +57,19 @@ func CreateCTX(alice, bob *Account, v *big.Int) (*CTX, error) {
 	log.Debug("create ctx")
 	params := Params()
 
-	sys := NewTwistedELGamalSystem()
 	ctx := CTX{}
 	ctx.pk1 = &alice.sk.PublicKey
 	ctx.pk2 = &bob.sk.PublicKey
 	ctx.senderBalance = alice.balance
 
 	// encrypt the transfer balance.
-	c1, err := sys.Encrypt(ctx.pk1, v.Bytes())
-	c2, err := sys.Encrypt(ctx.pk2, v.Bytes())
+	c1, err := Encrypt(ctx.pk1, v.Bytes())
+	c2, err := Encrypt(ctx.pk2, v.Bytes())
 	ctx.c1 = c1.CopyPublicPoint()
 	ctx.c2 = c2.CopyPublicPoint()
 
-	sigmaSys := NewSigmaSys()
 	// generate proof.
-	equalityProof, err := sigmaSys.GenerateProof(ctx.pk1, ctx.pk2, c1, c2)
+	equalityProof, err := GenerateSigmaProof(ctx.pk1, ctx.pk2, c1, c2)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +83,7 @@ func CreateCTX(alice, bob *Account, v *big.Int) (*CTX, error) {
 
 	// updated balance of alice.
 	updatedBalance := new(CTEncPoint).Sub(alice.balance, c1.CopyPublicPoint())
-	refreshUpdatedBalance, err := sys.Refresh(alice.sk, updatedBalance)
+	refreshUpdatedBalance, err := Refresh(alice.sk, updatedBalance)
 
 	if err != nil {
 		return nil, err
@@ -96,9 +94,7 @@ func CreateCTX(alice, bob *Account, v *big.Int) (*CTX, error) {
 	alice.balance = refreshUpdatedBalance.CopyPublicPoint()
 
 	// generate proof to prove two ciphertexts encrypt the same value under same public key.
-	dleProver := DLESigmaProver{}
-	dleProver.params = Params()
-	dleProof, err := dleProver.GenerateProof(updatedBalance, refreshUpdatedBalance.CopyPublicPoint(), alice.sk)
+	dleProof, err := GenerateDLESigmaProof(updatedBalance, refreshUpdatedBalance.CopyPublicPoint(), alice.sk)
 	if err != nil {
 		return nil, err
 	}
@@ -117,8 +113,7 @@ func CreateCTX(alice, bob *Account, v *big.Int) (*CTX, error) {
 // VerifyCTX checks the ctx is valid or not.
 func VerifyCTX(ctx *CTX) bool {
 	params := Params()
-	sigmaSys := NewSigmaSys()
-	if !sigmaSys.VerifySigmaProof(ctx.equalityProof) {
+	if !VerifySigmaProof(ctx.equalityProof) {
 		log.Warn("two encrypted value not same")
 		return false
 	}
@@ -141,4 +136,54 @@ func VerifyCTX(ctx *CTX) bool {
 	}
 
 	return true
+}
+
+// FundTX includes info to fund an account.
+type FundTX struct {
+	account *ECPoint
+	amount  *big.Int
+}
+
+// CreateFundTX creates tx to fund an account.
+func CreateFundTX(alice *Account, amount *big.Int) *FundTX {
+	tx := FundTX{}
+	tx.account = new(ECPoint).SetFromPublicKey(&alice.sk.PublicKey)
+	limit := Params().Max()
+	if amount.Cmp(limit) >= 0 {
+		panic("out of limit")
+	}
+
+	tx.amount = new(big.Int).Set(amount)
+	return &tx
+}
+
+// BurnTx includes info to burn an account and withdraw eth.
+type BurnTx struct {
+	Account *ECPoint       `json:"account"`
+	Amount  *big.Int       `json:"amount"`
+	Proof   *DLESigmaProof `json:"proof"`
+}
+
+// CreateBurnTx creates tx to burn an account.
+func CreateBurnTx(alice *Account, amount *big.Int) (*BurnTx, error) {
+	tx := BurnTx{}
+
+	//
+	tx.Account = new(ECPoint).SetFromPublicKey(&alice.sk.PublicKey)
+	tx.Amount = new(big.Int).Set(amount)
+
+	// generate proof to prove alice has the sk and the amount is indeed same with value encrypted.
+	// alice's encrypted balance should be right set.
+	params := Params()
+
+	g1 := new(ECPoint).Sub(alice.balance.Y, new(ECPoint).ScalarMult(params.GetG(), amount))
+
+	proof, err := generateDLESimaProof(g1, alice.balance.X, params.GetH(), new(ECPoint).SetFromPublicKey(&alice.sk.PublicKey), alice.sk.D)
+	if err != nil {
+		return nil, err
+	}
+
+	tx.Proof = proof
+
+	return &tx, nil
 }

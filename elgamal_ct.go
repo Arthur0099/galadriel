@@ -117,23 +117,11 @@ func randFieldElement(c elliptic.Curve, rand io.Reader) (k *big.Int, err error) 
 	return
 }
 
-// TwistedELGamalSystem represents twisted elgamal system for both encryption and decryption.
-type TwistedELGamalSystem struct {
-	params TwistedELGamalPublicParams
-}
-
-// NewTwistedELGamalSystem returns instance of TwistedELGamalSystem.
-func NewTwistedELGamalSystem() *TwistedELGamalSystem {
-	t := TwistedELGamalSystem{}
-	t.params = Params()
-
-	return &t
-}
-
 // GenerateKey generates key pair using btcec s256 curve.
-func (twELGSys *TwistedELGamalSystem) GenerateKey() (priv *ecdsa.PrivateKey, err error) {
-	curve := twELGSys.params.Curve()
-	h := twELGSys.params.GetH()
+func GenerateKey() (priv *ecdsa.PrivateKey, err error) {
+	params := Params()
+	curve := params.Curve()
+	h := params.GetH()
 
 	k, err := randFieldElement(curve, rand.Reader)
 	if err != nil {
@@ -148,12 +136,57 @@ func (twELGSys *TwistedELGamalSystem) GenerateKey() (priv *ecdsa.PrivateKey, err
 	return
 }
 
-// Encrypt encrypts msg by in twisted elgamal way.
-func (twELGSys *TwistedELGamalSystem) Encrypt(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
+// EncryptOnChain encrypts msg with random 0.
+func EncryptOnChain(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
+	params := Params()
 	msgBit := new(big.Int).SetBytes(msg)
 	log.Debug("msg", "v", msgBit, "string(b)", string(msg))
 
-	if msgBit.BitLen() > twELGSys.params.BitSizeLimit() {
+	if msgBit.BitLen() > params.BitSizeLimit() {
+		return nil, errors.New("msg reach size limit")
+	}
+
+	// Create ct instance.
+	ct := new(TwistedELGamalCT)
+	ct.X = NewEmptyECPoint(pk.Curve)
+	ct.Y = NewEmptyECPoint(pk.Curve)
+
+	// set curve
+	curve := pk.Curve
+
+	// set random 0.
+	r := new(big.Int).SetUint64(0)
+
+	// for sigma proof purpose.
+	ct.R = new(big.Int).Set(r)
+	ct.EncMsg = make([]byte, len(msg))
+	copy(ct.EncMsg, msg)
+
+	// compute pk * r.(pk ^ r)
+	ct.X.SetFromPublicKey(pk)
+	ct.X.ScalarMult(ct.X, r)
+
+	// compute g * m.(g ^ m)
+	g := params.GetG()
+	ct.Y.ScalarMult(g, msgBit)
+	log.Debug("encrypt msg(g^m)", "x", ct.Y.X, "y", ct.Y.Y)
+	// compute h * r.(h ^ r)
+	h := params.GetH()
+	s2X, s2Y := curve.ScalarMult(h.X, h.Y, r.Bytes())
+	// compute g * m + h * r.
+	ct.Y.Add(ct.Y, NewECPoint(s2X, s2Y, curve))
+
+	return ct, nil
+
+}
+
+// Encrypt encrypts msg in twisted elgamal way.
+func Encrypt(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
+	params := Params()
+	msgBit := new(big.Int).SetBytes(msg)
+	log.Debug("msg", "v", msgBit, "string(b)", string(msg))
+
+	if msgBit.BitLen() > params.BitSizeLimit() {
 		return nil, errors.New("msg reach size limit")
 	}
 
@@ -180,11 +213,11 @@ func (twELGSys *TwistedELGamalSystem) Encrypt(pk *ecdsa.PublicKey, msg []byte) (
 	ct.X.ScalarMult(ct.X, r)
 
 	// compute g * m.(g ^ m)
-	g := twELGSys.params.GetG()
+	g := params.GetG()
 	ct.Y.ScalarMult(g, msgBit)
 	log.Debug("encrypt msg(g^m)", "x", ct.Y.X, "y", ct.Y.Y)
 	// compute h * r.(h ^ r)
-	h := twELGSys.params.GetH()
+	h := params.GetH()
 	s2X, s2Y := curve.ScalarMult(h.X, h.Y, r.Bytes())
 	// compute g * m + h * r.
 	ct.Y.Add(ct.Y, NewECPoint(s2X, s2Y, curve))
@@ -193,12 +226,12 @@ func (twELGSys *TwistedELGamalSystem) Encrypt(pk *ecdsa.PublicKey, msg []byte) (
 }
 
 // Decrypt decrypts msg in twisted elgamal way.
-func (twELGSys *TwistedELGamalSystem) Decrypt(sk *ecdsa.PrivateKey, ct *CTEncPoint) []byte {
-	encodedMsg := twELGSys.getEncryptedMsg(sk, ct.Copy())
-	return twELGSys.decryptEncodedMsg(encodedMsg)
+func Decrypt(sk *ecdsa.PrivateKey, ct *CTEncPoint) []byte {
+	encodedMsg := getEncryptedMsg(sk, ct.Copy())
+	return decryptEncodedMsg(encodedMsg)
 }
 
-func (twELGSys *TwistedELGamalSystem) getEncryptedMsg(sk *ecdsa.PrivateKey, ct *CTEncPoint) *ECPoint {
+func getEncryptedMsg(sk *ecdsa.PrivateKey, ct *CTEncPoint) *ECPoint {
 	// get public curve.
 	curve := sk.PublicKey.Curve
 	// compute the inverse of sk.
@@ -213,12 +246,13 @@ func (twELGSys *TwistedELGamalSystem) getEncryptedMsg(sk *ecdsa.PrivateKey, ct *
 	return encodedMsg
 }
 
-// Decryptencodedmsg decrypts and returns original bytes of msg.
+// decryptencodedmsg decrypts and returns original bytes of msg.
 // encodeMsg = g * m
-func (twELGSys *TwistedELGamalSystem) decryptEncodedMsg(encodeMsg *ECPoint) []byte {
-	bit := uint64(twELGSys.params.BitSizeLimit())
+func decryptEncodedMsg(encodeMsg *ECPoint) []byte {
+	params := Params()
+	bit := uint64(params.BitSizeLimit())
 	upperLimit := new(big.Int).Exp(two, new(big.Int).SetUint64(bit), nil)
-	g := twELGSys.params.GetG()
+	g := params.GetG()
 
 	for i := uint64(1); i < upperLimit.Uint64(); i++ {
 		point := new(ECPoint).ScalarMult(g, new(big.Int).SetUint64(i))
@@ -231,9 +265,10 @@ func (twELGSys *TwistedELGamalSystem) decryptEncodedMsg(encodeMsg *ECPoint) []by
 }
 
 // Refresh Ciphertext refreshing algorithm: output a fresh ciphertext for the message encrypted in CT.
-func (twELGSys *TwistedELGamalSystem) Refresh(sk *ecdsa.PrivateKey, ct *CTEncPoint) (*TwistedELGamalCT, error) {
+func Refresh(sk *ecdsa.PrivateKey, ct *CTEncPoint) (*TwistedELGamalCT, error) {
+	params := Params()
 	// get encrypted msg.
-	encodedMsg := twELGSys.getEncryptedMsg(sk, ct.Copy())
+	encodedMsg := getEncryptedMsg(sk, ct.Copy())
 	// encrypt.
 	pk := sk.PublicKey
 	refreshCT := new(TwistedELGamalCT)
@@ -260,7 +295,7 @@ func (twELGSys *TwistedELGamalSystem) Refresh(sk *ecdsa.PrivateKey, ct *CTEncPoi
 	refreshCT.Y = encodedMsg.Copy()
 	log.Debug("refresh encoded msg", "x", refreshCT.Y.X, "y", refreshCT.Y.Y)
 	// compute h * r.(h ^ r)
-	h := twELGSys.params.GetH()
+	h := params.GetH()
 	s2X, s2Y := curve.ScalarMult(h.X, h.Y, r.Bytes())
 	// compute g * m + h * r.
 	refreshCT.Y.Add(refreshCT.Y, NewECPoint(s2X, s2Y, curve))

@@ -1,4 +1,4 @@
-const DLESigmaVerifier = artifacts.require("DLESigmaVerifier.sol");
+const DLESigmaVerifier = artifacts.require("DLESigmaVerifier");
 const {BN} = require("openzeppelin-test-helpers");
 
 import {ReadJsonFile} from "./file.js";

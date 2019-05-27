@@ -1,28 +1,137 @@
 pragma solidity >= 0.5.0 < 0.6.0;
+pragma experimental ABIEncoderV2;
 
 import "./library/BN128.sol";
+import "./DLESigmaVerifier.sol";
+import "./PublicParams.sol";
 
 contract PGC {
 
   using BN128 for BN128.G1Point;
   using BN128 for uint;
 
-  // .
-  //  mapping(string => BN128.G1Point) balance;
-  //  mapping(string => BN128.G1Point) pk;
-  //  mapping(string => bool) used;
+  // encrypted ct.(balance of account)
+  struct CT {
+    BN128.G1Point X;
+    BN128.G1Point Y;
+  }
+
+  // pk.x => pk.y => encrypt balance.
+  mapping(uint => mapping(uint => CT)) balance;
+
+  // bitSize of balance value.
+  uint public constant bitSize = 16;
+  uint public constant n = 4;
+
+  // public h point.
+  BN128.G1Point public h;
+
+  // public g point.
+  BN128.G1Point public g;
+
+  // dle sigma verifier.
+  DLESigmaVerifier public dleSigmaVerifier;
+
+  // params.
+  PublicParams public params;
 
   //
-  function initialBalance(string memory name, uint[2] memory publicKey, uint[2] memory balanceCT) public returns(bool) {
-    //    if (used[name]) {
-    //      return false;
-    //    }
+  constructor(address params_, address dleSigmaVerifier_) public {
+    params = PublicParams(params_);
+    dleSigmaVerifier = DLESigmaVerifier(dleSigmaVerifier_);
 
-    //    used[name] = true;
-    //    balance[name] = BN128.G1Point(balanceCT[0], balanceCT[1]);
-    //    pk[name] = BN128.G1Point(publicKey[0], publicKey[1]);
+    BN128.G1Point memory tmpH = params.getH();
+    BN128.G1Point memory tmpG = params.getG();
+
+    h.X = tmpH.X;
+    h.Y = tmpH.Y;
+    g.X = tmpG.X;
+    g.Y = tmpG.Y;
+    require(bitSize == params.getBitSize(), "bitsize not equal");
+  }
+
+  /*
+   * @dev deposit eth to an account.
+   */
+  function depositAccount(uint[2] memory publicKey) public payable returns(bool) {
+    // check eth account.
+    require(msg.value > 1 ether, "eth deposited less than 1 eth");
+    require(msg.value/1 ether*1 ether == msg.value, "eth amount not an integer");
+
+    // add amount to user account.
+    uint amount = msg.value/1 ether;
+
+    CT storage userBalance = balance[publicKey[0]][publicKey[1]];
+    CT memory deposited = encrypt(amount, BN128.G1Point(publicKey[0], publicKey[1]));
+    userBalance.X = userBalance.X.add(deposited.X);
+    userBalance.Y = userBalance.Y.add(deposited.Y);
 
     return true;
+  }
+
+  event T(uint x);
+  /*
+   * @dev burn withdraw all eth back to eth account.
+   * proof[0-1]: A1 point.
+   * proof[2-3]: A2 point.
+   *
+   */
+  function burn(address payable receiver, uint amount, uint[2] memory publicKey, uint[4] memory proof, uint z) public returns(bool) {
+    // do nothing
+    if (amount < 1) {
+      return false;
+    }
+    // compute y' = Y - g*m.
+    CT storage userBalance = balance[publicKey[0]][publicKey[1]];
+    // todo: check not zero.
+
+    BN128.G1Point memory y = userBalance.Y.add(g.mul(amount).neg());
+    uint[12] memory points;
+    points[0] = proof[0];
+    points[1] = proof[1];
+    points[2] = proof[2];
+    points[3] = proof[3];
+    points[4] = y.X;
+    points[5] = y.Y;
+    points[6] = userBalance.X.X;
+    points[7] = userBalance.X.Y;
+    points[8] = h.X;
+    points[9] = h.Y;
+    points[10] = publicKey[0];
+    points[11] = publicKey[1];
+
+    // do nothing when error.
+    if (!dleSigmaVerifier.verifyDLESigmaProof(points, z)) {
+      return false;
+    }
+
+    // update user encrypted balance.
+    CT memory updatedBalance = encrypt(0, BN128.G1Point(publicKey[0], publicKey[1]));
+    userBalance.X = updatedBalance.X;
+    userBalance.Y = updatedBalance.Y;
+
+    // transfer eth back to user.
+    receiver.transfer(amount*1 ether);
+  }
+
+  /*
+   * @dev encrypt for despoit eth account. the randomness is set to 0.
+   * @dev it's ok since the eth amount is public know to everyone.
+   * @dev but the ctx's randomness is not know.
+   */
+  function encrypt(uint amount, BN128.G1Point memory pk) internal view returns(CT memory) {
+    require(amount < 2**bitSize, "amount out of range");
+
+    // no sense.
+    uint r = 0;
+
+    CT memory ct;
+    // X = pk * r.
+    ct.X = pk.mul(r);
+    // Y = g*m + h*r.
+    ct.Y = g.mul(amount).add(h.mul(r));
+
+    return ct;
   }
 
   /*
