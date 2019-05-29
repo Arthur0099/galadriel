@@ -1,6 +1,9 @@
 const PGC = artifacts.require("PGC");
 const DLESigmaVerifier = artifacts.require("DLESigmaVerifier");
 const PublicParams = artifacts.require("PublicParams");
+const IPVerifier = artifacts.require("IPVerifier");
+const RangeProofVerifier = artifacts.require("RangeProofVerifier");
+const SigmaVerifier = artifacts.require("SigmaVerifier");
 const {ether, balance, BN, constants, expectEvent, expectRevert} = require('openzeppelin-test-helpers');
 const { expect } = require('chai');
 
@@ -10,7 +13,10 @@ contract("pgc", function(account){
   before(async function(){
     this.PublicParamsIns = await PublicParams.new();
     this.DLESigmaVerifierIns = await DLESigmaVerifier.new();
-    this.PGCIns = await PGC.new(this.PublicParamsIns.address, this.DLESigmaVerifierIns.address);
+    this.IPVerifierIns = await IPVerifier.new(this.PublicParamsIns.address);
+    this.RangeProofVerifierIns = await RangeProofVerifier.new(this.PublicParamsIns.address, this.IPVerifierIns.address);
+    this.SigmaVerifierIns = await SigmaVerifier.new(this.PublicParamsIns.address);
+    this.PGCIns = await PGC.new(this.PublicParamsIns.address, this.DLESigmaVerifierIns.address, this.RangeProofVerifierIns.address, this.SigmaVerifierIns.address);
   });
 
   //

@@ -313,7 +313,7 @@ func VerifyDLESigmaProof(ori, refresh *CTEncPoint, pk *ecdsa.PublicKey, proof *D
 	g1 := new(ECPoint).Sub(refresh.Y, ori.Y)
 	// h1 = X(fresh) - X(ori)
 	h1 := new(ECPoint).Sub(refresh.X, ori.X)
-	// g2 = G base point.
+	// g2 = h base point.
 	g2 := Params().GetH()
 	// h2 = pk.
 	h2 := new(ECPoint).SetFromPublicKey(pk)

@@ -167,7 +167,7 @@ contract PGC {
     b.dleSigmaPoints[0] = BN128.G1Point(points[24], points[25]);
     b.dleSigmaPoints[1] = BN128.G1Point(points[26], points[27]);
     // only this failed.
-    require(!verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, BN128.G1Point(points[0], points[1]), scalar[3]), "dle sigma proof failed");
+    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, BN128.G1Point(points[0], points[1]), scalar[3]), "dle sigma proof failed");
 
     // check range proof 1.
     for (uint i = 0; i < 8; i++) {
@@ -235,8 +235,8 @@ contract PGC {
     points[5] = g1.Y;
     points[6] = h1.X;
     points[7] = h1.Y;
-    points[8] = g.X;
-    points[9] = g.Y;
+    points[8] = h.X;
+    points[9] = h.Y;
     points[10] = pk.X;
     points[11] = pk.Y;
     return dleSigmaVerifier.verifyDLESigmaProof(points, z);
