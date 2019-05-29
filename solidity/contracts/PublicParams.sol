@@ -1,6 +1,4 @@
 pragma solidity >= 0.5.0 < 0.6.0;
-pragma experimental ABIEncoderV2;
-
 import "./library/BN128.sol";
 
 contract PublicParams {
@@ -60,28 +58,47 @@ contract PublicParams {
   }
 
   // return g generator.
-  function getG() public view returns(BN128.G1Point memory) {
-    return g;
+  function getG() public view returns(uint[2] memory) {
+    uint[2] memory res;
+    res[0] = g.X;
+    res[1] = g.Y;
+    return res;
   }
 
   // return h generator.
-  function getH() public view returns(BN128.G1Point memory) {
-    return h;
+  function getH() public view returns(uint[2] memory) {
+    uint[2] memory res;
+    res[0] = h.X;
+    res[1] = h.Y;
+    return res;
   }
 
   // return u fix point.
-  function getU() public view returns(BN128.G1Point memory) {
-    return u;
+  function getU() public view returns(uint[2] memory) {
+    uint[2] memory res;
+    res[0] = u.X;
+    res[1] = u.Y;
+    return res;
   }
 
   // return g vector generator.
-  function getGVector() public view returns(BN128.G1Point[bitSize] memory) {
-    return gVector;
+  function getGVector() public view returns(uint[bitSize*2] memory) {
+    uint[bitSize*2] memory res;
+    for (uint i = 0; i < bitSize; i++) {
+      res[2*i] = gVector[i].X;
+      res[2*i+1] = gVector[i].Y;
+    }
+    return res;
   }
 
   // return h vector generator.
-  function getHVector() public view returns(BN128.G1Point[bitSize] memory) {
-    return hVector;
+  function getHVector() public view returns(uint[2*bitSize] memory) {
+    uint[bitSize*2] memory res;
+    for (uint i = 0; i < bitSize; i++) {
+      res[2*i] = hVector[i].X;
+      res[2*i+1] = hVector[i].Y;
+    }
+    return res;
   }
 
   // return bit size for value.

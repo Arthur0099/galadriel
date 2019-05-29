@@ -24,19 +24,19 @@ contract("public params", function (accounts){
     // check g vector/h vector.
     const contractGV = await this.ContractIns.getGVector();
     const contractHV = await this.ContractIns.getHVector();
-    assert.equal(contractGV.length, params.gv.length, "gv length not equal");
-    assert.equal(contractHV.length, params.hv.length, "hv length not equal");
+    assert.equal(contractGV.length, 2*params.gv.length, "gv length not equal");
+    assert.equal(contractHV.length, 2*params.hv.length, "hv length not equal");
     assert.equal(contractGV.length, contractHV.length, "gv length not equal hv length");
 
-    for (let i = 0; i < contractGV.length; i++) {
+    for (let i = 0; i < params.hv.lengt; i++) {
       let conGVector = contractGV[i];
       let conHVector = contractHV[i];
       let goGVector = params.gv[i];
       let goHVector = params.hv[i];
-      assert.equal(conGVector[0], goGVector.X, i+" g vector x not equal");
-      assert.equal(conGVector[1], goGVector.Y, i+" g vector y not equal");
-      assert.equal(conHVector[0], goHVector.X, i+" h vector x not equal");
-      assert.equal(conHVector[1], goHVector.Y, i+" h vector y not equal");
+      assert.equal(contractGV[2*i], goGVector.X, i+" g vector x not equal");
+      assert.equal(contractGV[2*i+1], goGVector.Y, i+" g vector y not equal");
+      assert.equal(contractHV[2*i], goHVector.X, i+" h vector x not equal");
+      assert.equal(contractHV[2*i+1], goHVector.Y, i+" h vector y not equal");
     }
   });
 });

@@ -3,6 +3,7 @@ package pgc
 import (
 	"errors"
 	"math/big"
+	"unicode"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 )
@@ -65,4 +66,16 @@ func Delta(y, z, order *big.Int, n int) *big.Int {
 	res.Mod(res, order)
 
 	return res
+}
+
+// LowerCaseFirst converts first character of string to lowercase.
+func LowerCaseFirst(data string) string {
+	// Do nothing with empty string.
+	if len(data) == 0 {
+		return data
+	}
+
+	runeStr := []rune(data)
+	runeStr[0] = unicode.ToLower(runeStr[0])
+	return string(runeStr)
 }

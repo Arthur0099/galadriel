@@ -1,9 +1,10 @@
 pragma solidity >= 0.5.0 < 0.6.0;
-pragma experimental ABIEncoderV2;
 
 import "./library/BN128.sol";
 import "./DLESigmaVerifier.sol";
 import "./PublicParams.sol";
+import "./RangeProofVerifier.sol";
+import "./SigmaVerifier.sol";
 
 contract PGC {
 
@@ -14,6 +15,24 @@ contract PGC {
   struct CT {
     BN128.G1Point X;
     BN128.G1Point Y;
+  }
+
+  //
+  struct Board {
+    uint[20] sigmaPoints;
+
+    //
+    CT ct1;
+    CT ct2;
+    CT tmpUpdatedBalance;
+    CT refreshBalance;
+    BN128.G1Point[2] dleSigmaPoints;
+
+    //
+    uint[10] rpoints;
+    uint[5] rscalar;
+    uint[2*n] l;
+    uint[2*n] r;
   }
 
   // pk.x => pk.y => encrypt balance.
@@ -32,21 +51,29 @@ contract PGC {
   // dle sigma verifier.
   DLESigmaVerifier public dleSigmaVerifier;
 
+  // range proof verifier.
+  RangeProofVerifier public rangeProofVerifier;
+
+  // sigma verifier.
+  SigmaVerifier public sigmaVerifier;
+
   // params.
   PublicParams public params;
 
   //
-  constructor(address params_, address dleSigmaVerifier_) public {
+  constructor(address params_, address dleSigmaVerifier_, address rangeProofVerifier_, address sigmaVerifier_) public {
     params = PublicParams(params_);
     dleSigmaVerifier = DLESigmaVerifier(dleSigmaVerifier_);
+    rangeProofVerifier = RangeProofVerifier(rangeProofVerifier_);
+    sigmaVerifier = SigmaVerifier(sigmaVerifier_);
 
-    BN128.G1Point memory tmpH = params.getH();
-    BN128.G1Point memory tmpG = params.getG();
+    uint[2] memory tmpH = params.getH();
+    uint[2] memory tmpG = params.getG();
 
-    h.X = tmpH.X;
-    h.Y = tmpH.Y;
-    g.X = tmpG.X;
-    g.Y = tmpG.Y;
+    h.X = tmpH[0];
+    h.Y = tmpH[1];
+    g.X = tmpG[0];
+    g.Y = tmpG[1];
     require(bitSize == params.getBitSize(), "bitsize not equal");
   }
 
@@ -69,7 +96,153 @@ contract PGC {
     return true;
   }
 
-  event T(uint x);
+  /*
+   * @dev transfer from on account to another.
+   * sigma proof to prove value in pk1's ct == value pk2's ct
+   * dle sigma proof to prove value updated in pk1's ct == value in refreshed pk1's ct
+
+   * points[0-1]: pk1
+   * points[2-3]: ct1 X
+   * points[4-5]: ct1 Y
+   * points[6-7]: pk2
+   * points[8-9]: ct2 X
+   * points[10-11]: ct2 Y
+   * points[12-13]: sigma proof A1.
+   * points[14-15]: sigma proof A2.
+   * points[16-17]: sigma proof B1.
+   * points[18-19]: sigma proof B2.
+   * points[20-21]: pk1's refreshed balance ct.X
+   * points[22-23]: pk1's refreshed balance ct.Y
+   * points[24-25]: dle sigma proof A1.
+   * points[26-27]: dle sigma proof A2.
+
+   * scalar[0-2]: sigma proof z1, z2, z3.
+   * scalar[3]: dle sigma proof z.
+
+   * scalar[4]: range proof 1 t.
+   * scalar[5]: range proof 1 tx.
+   * scalar[6]: range proof 1 u.
+   * scalar[7]: range proof 1 a.
+   * scalar[8]: range proof 1 b.
+
+   * scalar[9]: range proof 2 t.
+   * scalar[10]: range proof 2 tx.
+   * scalar[11]: range proof 2 u.
+   * scalar[12]: range proof 2 a.
+   * scalar[13]: range proof 2 b.
+
+   * range proof 1 to prove v in pk1's ct(points[2-3]) in range [0, 2^bitSize-1]
+   * rpoints[0-1]: range proof 1 A.
+   * rpoints[2-3]: range proof 1 S.
+   * rpoints[4-5]: range proof 1 T1.
+   * rpoints[6-7]: range proof 1 T2.
+
+   * range proof 2 to prove v in refreshed balance (points[10-11]) in range [0, 2^bitSize-1]
+   * rpoints[8-9]: range proof 2 A.
+   * rpoints[10-11]: range proof 2 S.
+   * rpoints[12-13]: range proof 2 T1.
+   * rpoints[14-15]: range proof 2 T2.
+   * l[0-2*n-1]: range proof 1 l.x, l.y.
+   * r[0-2*n-1]: range proof 1 r.x, r.y.
+   * l[2*n-4*n-1]: range proof 2 l.x, l.y.
+   * r[2*n-4*n-1]: range proof 2 r.x, r.y.
+   */
+  function transfer(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r) public returns(bool) {
+    Board memory b;
+    // check v in ct1 == c in ct2.
+    for (uint i = 0; i < 20; i++) {
+      b.sigmaPoints[i] = points[i];
+    }
+    require(sigmaVerifier.verifySigmaProof(b.sigmaPoints, scalar[0], scalar[1], scalar[2]), "sigma verify failed");
+
+    // check balance updated is same with refreshed balance.
+    b.ct1.X = BN128.G1Point(points[2], points[3]);
+    b.ct1.Y = BN128.G1Point(points[4], points[5]);
+    CT storage userBalance = balance[points[0]][points[1]];
+    // get tmp balance = alice'balnce - transfer'balance
+    b.tmpUpdatedBalance.X = userBalance.X.add(b.ct1.X.neg());
+    b.tmpUpdatedBalance.Y = userBalance.Y.add(b.ct1.Y.neg());
+    b.refreshBalance.X = BN128.G1Point(points[20], points[21]);
+    b.refreshBalance.Y = BN128.G1Point(points[22], points[23]);
+    b.dleSigmaPoints[0] = BN128.G1Point(points[24], points[25]);
+    b.dleSigmaPoints[1] = BN128.G1Point(points[26], points[27]);
+    // only this failed.
+    require(!verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, BN128.G1Point(points[0], points[1]), scalar[3]), "dle sigma proof failed");
+
+    // check range proof 1.
+    for (uint i = 0; i < 8; i++) {
+      b.rpoints[i] = rpoints[i];
+    }
+    // set ct1.Y (commitment).
+    b.rpoints[8] = points[4];
+    b.rpoints[9] = points[5];
+    for (uint i = 0; i < 2*n; i++) {
+      b.l[i] = l[i];
+      b.r[i] = r[i];
+    }
+    for (uint i = 0; i < 5; i++) {
+      b.rscalar[i] = scalar[4+i];
+    }
+    require(rangeProofVerifier.verifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 1 failed");
+
+    // check range proof 2.
+    for (uint i = 0; i < 8; i++) {
+      b.rpoints[i] = rpoints[8+i];
+    }
+    b.rpoints[8] = points[22];
+    b.rpoints[9] = points[23];
+    for (uint i = 0; i < 2*n; i++) {
+      b.l[i] = l[i+2*n];
+      b.r[i] = r[i+2*n];
+    }
+    for (uint i = 0; i < 5; i++) {
+      b.rscalar[i] = scalar[9+i];
+    }
+    require(rangeProofVerifier.verifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 2 verify failed");
+
+    // update sender's balance.
+    userBalance.X = b.tmpUpdatedBalance.X;
+    userBalance.Y = b.tmpUpdatedBalance.Y;
+
+    // update receiver's balance.
+    CT storage receiverBalance = balance[points[6]][points [7]];
+    b.ct2.X = BN128.G1Point(points[8], points[9]);
+    b.ct2.Y = BN128.G1Point(points[10], points[11]);
+    receiverBalance.X = receiverBalance.X.add(b.ct2.X);
+    receiverBalance.Y = receiverBalance.Y.add(b.ct2.Y);
+
+    return true;
+  }
+
+  function getUserBalance(uint x, uint y) public view returns (uint[4] memory ct) {
+    CT memory userBalance = balance[x][y];
+    ct[0] = userBalance.X.X;
+    ct[1] = userBalance.X.Y;
+    ct[2] = userBalance.Y.X;
+    ct[3] = userBalance.Y.Y;
+    return ct;
+  }
+
+  function verifyDLESigmaProof(CT memory ori, CT memory refresh, BN128.G1Point[2] memory p, BN128.G1Point memory pk, uint z) internal view returns(bool) {
+    BN128.G1Point memory g1 = refresh.Y.add(ori.Y.neg());
+    BN128.G1Point memory h1 = refresh.X.add(ori.X.neg());
+    uint[12] memory points;
+    points[0] = p[0].X;
+    points[1] = p[0].Y;
+    points[2] = p[1].X;
+    points[3] = p[1].Y;
+    points[4] = g1.X;
+    points[5] = g1.Y;
+    points[6] = h1.X;
+    points[7] = h1.Y;
+    points[8] = g.X;
+    points[9] = g.Y;
+    points[10] = pk.X;
+    points[11] = pk.Y;
+    return dleSigmaVerifier.verifyDLESigmaProof(points, z);
+  }
+
+
   /*
    * @dev burn withdraw all eth back to eth account.
    * proof[0-1]: A1 point.

@@ -4,8 +4,8 @@ pragma experimental ABIEncoderV2;
 import "./library/BN128.sol";
 
 interface SigmaProofParams {
-  function getG() external view returns(BN128.G1Point memory);
-  function getH() external view returns(BN128.G1Point memory);
+  function getG() external view returns(uint[2] memory);
+  function getH() external view returns(uint[2] memory);
 }
 
 contract SigmaVerifier {
@@ -18,8 +18,13 @@ contract SigmaVerifier {
   constructor(address params) public {
     // init g and h point.
     SigmaProofParams sigmaParams = SigmaProofParams(params);
-    g = sigmaParams.getG();
-    h = sigmaParams.getH();
+    uint[2] memory tmpG = sigmaParams.getG();
+    uint[2] memory tmpH = sigmaParams.getH();
+    g.X = tmpG[0];
+    g.Y = tmpG[1];
+
+    h.X = tmpH[0];
+    h.Y = tmpH[1];
   }
 
   /*

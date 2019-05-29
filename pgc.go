@@ -83,6 +83,7 @@ func CreateCTX(alice, bob *Account, v *big.Int) (*CTX, error) {
 
 	// updated balance of alice.
 	updatedBalance := new(CTEncPoint).Sub(alice.balance, c1.CopyPublicPoint())
+	log.Debug("alice' updated balance", "x.x", updatedBalance.X.X, "x.y", updatedBalance.X.Y, "y.x", updatedBalance.Y.X, "y.y", updatedBalance.Y.Y)
 	refreshUpdatedBalance, err := Refresh(alice.sk, updatedBalance)
 
 	if err != nil {
@@ -91,7 +92,7 @@ func CreateCTX(alice, bob *Account, v *big.Int) (*CTX, error) {
 
 	ctx.refreshUpdatedBalance = refreshUpdatedBalance.CopyPublicPoint()
 	// update alice balance and bob balance
-	alice.balance = refreshUpdatedBalance.CopyPublicPoint()
+	alice.balance = updatedBalance.Copy()
 
 	// generate proof to prove two ciphertexts encrypt the same value under same public key.
 	dleProof, err := GenerateDLESigmaProof(updatedBalance, refreshUpdatedBalance.CopyPublicPoint(), alice.sk)

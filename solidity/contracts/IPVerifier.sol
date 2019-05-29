@@ -1,14 +1,13 @@
 pragma solidity >= 0.5.0 < 0.6.0;
-pragma experimental ABIEncoderV2;
 
 import "./library/BN128.sol";
 
 interface IPParams {
   function getBitSize() external view returns(uint);
   function getN() external view returns(uint);
-  function getGVector() external view returns(BN128.G1Point[16] memory);
-  function getHVector() external view returns(BN128.G1Point[16] memory);
-  function getU() external view returns(BN128.G1Point memory);
+  function getGVector() external view returns(uint[32] memory);
+  function getHVector() external view returns(uint[32] memory);
+  function getU() external view returns(uint[2] memory);
 }
 
 contract IPVerifier {
@@ -47,9 +46,9 @@ contract IPVerifier {
     ipParams = IPParams(params);
     require(bitSize == ipParams.getBitSize(), "bis size not equal");
     require(n == ipParams.getN(), "number of l,r not equal");
-    BN128.G1Point memory tmpU = ipParams.getU();
-    u.X = tmpU.X;
-    u.Y = tmpU.Y;
+    uint[2] memory tmpU = ipParams.getU();
+    u.X = tmpU[0];
+    u.Y = tmpU[1];
   }
 
 
@@ -61,28 +60,29 @@ contract IPVerifier {
    * scalar[2]: c.
    */
   function verifyIPProof(uint[2] memory p, uint[n*2] memory l, uint[n*2] memory r, uint[3] memory scalar) public view returns(bool) {
-    IPProof memory proof;
-    for (uint i = 0; i < n; i++) {
-      proof.l[i] = BN128.G1Point(l[i*2], l[i*2+1]);
-      proof.r[i] = BN128.G1Point(r[i*2], r[i*2+1]);
-    }
-    proof.a = scalar[0];
-    proof.b = scalar[1];
-
-    return verifyIPProofStep1(ipParams.getGVector(), ipParams.getHVector(), BN128.G1Point(p[0], p[1]), scalar[2], proof);
+    return verifyIPProofWithCustomParams(ipParams.getGVector(), ipParams.getHVector(), p, scalar[2], l, r, scalar[0], scalar[1]);
   }
 
   /*
    * @dev call by range proof.
    * @dev Warning: hv isn't the public h vector generator.
    */
-  function verifyIPProofWithCustomParams(BN128.G1Point[bitSize] memory gv, BN128.G1Point[bitSize] memory hv, BN128.G1Point memory p, uint c, BN128.G1Point[n] memory l, BN128.G1Point[n] memory r, uint a, uint b) public view returns(bool) {
+  function verifyIPProofWithCustomParams(uint[bitSize*2] memory gv, uint[bitSize*2] memory hv, uint[2] memory p, uint c, uint[n*2] memory l, uint[n*2] memory r, uint a, uint b) public view returns(bool) {
+    BN128.G1Point[bitSize] memory gvPoints;
+    BN128.G1Point[bitSize] memory hvPoints;
+    for (uint i = 0; i < bitSize; i++) {
+      gvPoints[i] = BN128.G1Point(gv[2*i], gv[2*i+1]);
+      hvPoints[i] = BN128.G1Point(hv[2*i], hv[2*i+1]);
+    }
     IPProof memory proof;
-    proof.l = l;
-    proof.r = r;
+    for (uint i = 0; i < n; i++) {
+      proof.l[i] = BN128.G1Point(l[2*i], l[2*i+1]);
+      proof.r[i] = BN128.G1Point(r[2*i], r[2*i+1]);
+    }
+
     proof.a = a;
     proof.b = b;
-    return verifyIPProofStep1(gv, hv, p, c, proof);
+    return verifyIPProofStep1(gvPoints, hvPoints, BN128.G1Point(p[0], p[1]), c, proof);
   }
 
 
