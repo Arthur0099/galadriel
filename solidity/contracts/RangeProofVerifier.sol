@@ -470,7 +470,7 @@ contract RangeProofVerifier {
     return res;
   }
 
-  function toUintArray(BN128.G1Point[bitSize] memory points) internal view returns(uint[2*bitSize] memory) {
+  function toUintArray(BN128.G1Point[bitSize] memory points) internal pure returns(uint[2*bitSize] memory) {
     uint[2*bitSize] memory res;
     for (uint i = 0; i < bitSize; i++) {
       res[2*i] = points[i].X;

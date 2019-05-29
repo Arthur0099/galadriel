@@ -60,6 +60,11 @@ contract PGC {
   // params.
   PublicParams public params;
 
+  // events
+  event LogDepositAccount(address indexed proxy, uint tox, uint toy, uint amount, uint time);
+  event LogTransfer(address indexed proxy, uint fromx, uint fromy, uint tox, uint toy, uint time);
+  event LogBurn(address indexed proxy, address indexed receiver, uint accountx, uint accounty, uint amount, uint time);
+
   //
   constructor(address params_, address dleSigmaVerifier_, address rangeProofVerifier_, address sigmaVerifier_) public {
     params = PublicParams(params_);
@@ -92,6 +97,8 @@ contract PGC {
     CT memory deposited = encrypt(amount, BN128.G1Point(publicKey[0], publicKey[1]));
     userBalance.X = userBalance.X.add(deposited.X);
     userBalance.Y = userBalance.Y.add(deposited.Y);
+
+    emit LogDepositAccount(msg.sender, publicKey[0], publicKey[1], msg.value, now);
 
     return true;
   }
@@ -211,6 +218,8 @@ contract PGC {
     receiverBalance.X = receiverBalance.X.add(b.ct2.X);
     receiverBalance.Y = receiverBalance.Y.add(b.ct2.Y);
 
+    emit LogTransfer(msg.sender, points[0], points[1], points[6], points[7], now);
+
     return true;
   }
 
@@ -273,10 +282,8 @@ contract PGC {
     points[10] = publicKey[0];
     points[11] = publicKey[1];
 
-    // do nothing when error.
-    if (!dleSigmaVerifier.verifyDLESigmaProof(points, z)) {
-      return false;
-    }
+    // revert when error.
+    require(dleSigmaVerifier.verifyDLESigmaProof(points, z), "dle sigma verify failed");
 
     // update user encrypted balance.
     CT memory updatedBalance = encrypt(0, BN128.G1Point(publicKey[0], publicKey[1]));
@@ -285,6 +292,8 @@ contract PGC {
 
     // transfer eth back to user.
     receiver.transfer(amount*1 ether);
+
+    emit LogBurn(msg.sender, receiver, publicKey[0], publicKey[1], amount*1 ether, now);
   }
 
   /*
@@ -305,65 +314,5 @@ contract PGC {
     ct.Y = g.mul(amount).add(h.mul(r));
 
     return ct;
-  }
-
-  /*
-   * @dev transfer from one to another.
-   * pks[0-1]: sender
-   * pks[2-3]: receiver
-   *****************************************************
-   * rangeProof1: prove transfer amount v in right range.
-   * points[0-1]: A.
-   * points[2-3]: S.
-   * points[4-5]: T1.
-   * points[6-7]: T2.
-   * points[8-9]: V(commitment).
-   * scalar[0]: t.
-   * scalar[1]: tx.
-   * scalar[2]: u.
-   * scalar[3]: a.
-   * scalar[4]: b.
-   * l[0-1]: l0.x, l0.y
-   ...
-   * l[6-7]: l3.x, l3.y
-   * r[0-1]: r0.x, r0.y
-   ...
-   * r[6-7]: r3.x, r3.y
-   *****************************************************
-   * rangeProof2: prove sender's updated balance is in right range.
-   * points[10-11]: A.
-   * points[12-13]: S.
-   * points[14-15]: T1.
-   * points[16-17]: T2.
-   * points[18-19]: V.
-   * scalar[5]: t.
-   * scalar[6]: tx.
-   * scalar[7]: u.
-   * scalar[8]: a.
-   * scalar[9]: b.
-   * l[8-9]: l0.x, l0.y
-   ...
-   * l[14-15]: l3.x, l3.y
-   ...
-   * r[8-9]: r0.x, r0.y
-   ...
-   * r[14-15]: r3.x, r4.y
-   *****************************************************
-   * dle sigma proof prove two encrypted data was same data under
-   * same public key.
-   * points[20-21]: A1.
-   * points[22-23]: A2.
-   * points[24-25]: g1.
-   * points[26-27]: h1.
-   * points[28-29]: g2.
-   * points[30-31]: h2.
-   * scalar[10]: z.
-   ******************************************************
-   * sigma proof proving two encrypted was same value under two
-   * public key.
-   * points[32-33]:
-   */
-  function transfer() public returns(bool) {
-    //
   }
 }
