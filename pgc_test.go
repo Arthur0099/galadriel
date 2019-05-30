@@ -132,8 +132,18 @@ func TestDepositBurn(t *testing.T) {
 	WriteToFile(data, path)
 }
 
-//
-func TestPGCFlow(t *testing.T) {
+func getRopstenAccount() *bind.TransactOpts {
+	keyHex := "B38BB7EF4D69CCB1D5A1735887521BC1717AF203AE8BE7F8928E9ECC54FFD5E3"
+
+	key, err := crypto.HexToECDSA(keyHex)
+	if err != nil {
+		panic(err)
+	}
+
+	return bind.NewKeyedTransactor(key)
+}
+
+func TestLocal(t *testing.T) {
 	url := "http://127.0.0.1:8545"
 	rpcClient, _ := Dial(url)
 	client, _ := ethclient.Dial(url)
@@ -150,18 +160,34 @@ func TestPGCFlow(t *testing.T) {
 		return
 	}
 
+	testPGCFlow(sender, client, t)
+}
+
+func TestRopsten(t *testing.T) {
+	sender := getRopstenAccount()
+	url := "https://ropsten.infura.io/v3/10d08c76bb104f6286f774ec21fa7ac9"
+
+	client, _ := ethclient.Dial(url)
+	testPGCFlow(sender, client, t)
+}
+
+//
+func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing.T) {
+	var err error
+	sender.GasLimit = 7000000
 	cs := DeployPGCContracts(sender, client)
 
 	// generate alice, bob account.
-	aliceInitBalance := new(big.Int).SetUint64(100)
+	aliceInitBalance := new(big.Int).SetUint64(5)
 	alice := CreateTestAccount("alice", aliceInitBalance)
 	sender.Value = new(big.Int).Mul(ether, aliceInitBalance)
 	alicePK := [2]*big.Int{alice.sk.PublicKey.X, alice.sk.PublicKey.Y}
-	_, err = cs.PGC.DepositAccount(sender, alicePK)
+	aliceTx, err := cs.PGC.DepositAccount(sender, alicePK)
 	if err != nil {
 		t.Error(err)
 		return
 	}
+	waitFor(aliceTx.Hash(), client)
 	// check for alice's encrypted balance.
 	aliceEncryptB, _ := cs.PGC.GetUserBalance(nil, alice.sk.PublicKey.X, alice.sk.PublicKey.Y)
 	aliceDecryptB := Decrypt(alice.sk, arrayToCT(aliceEncryptB, alice.sk.Curve))
@@ -173,16 +199,17 @@ func TestPGCFlow(t *testing.T) {
 	alice.balance = arrayToCT(aliceEncryptB, alice.sk.Curve)
 
 	// generate bob.
-	bobInitBalance := new(big.Int).SetUint64(500)
+	bobInitBalance := new(big.Int).SetUint64(5)
 	bob := CreateTestAccount("bob", bobInitBalance)
 	sender.Value = new(big.Int).Mul(ether, bobInitBalance)
 	sender.Nonce.Add(sender.Nonce, one)
 	bobPK := [2]*big.Int{bob.sk.PublicKey.X, bob.sk.PublicKey.Y}
-	_, err = cs.PGC.DepositAccount(sender, bobPK)
+	bobTx, err := cs.PGC.DepositAccount(sender, bobPK)
 	if err != nil {
 		t.Error(err)
 		return
 	}
+	waitFor(bobTx.Hash(), client)
 	sender.Nonce.Add(sender.Nonce, one)
 	// check for bob's encrypted balance.
 	bobEncryptB, _ := cs.PGC.GetUserBalance(nil, bob.sk.PublicKey.X, bob.sk.PublicKey.Y)
@@ -194,7 +221,7 @@ func TestPGCFlow(t *testing.T) {
 	// keep balance same with chain.
 	bob.balance = arrayToCT(bobEncryptB, bob.sk.Curve)
 
-	transferAmount := new(big.Int).SetUint64(30)
+	transferAmount := new(big.Int).SetUint64(3)
 	ctx, err := CreateCTX(alice, bob, transferAmount)
 	if err != nil {
 		t.Error(err)
@@ -209,6 +236,8 @@ func TestPGCFlow(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	sender.Nonce.Add(sender.Nonce, one)
+	waitFor(transferTxHash.Hash(), client)
 	// cost 6444057 gas
 	t.Log("transfer from alice to bob", transferAmount, transferTxHash.Hash().Hex())
 
@@ -232,6 +261,23 @@ func TestPGCFlow(t *testing.T) {
 	}
 	t.Log("bob's balance after is ", new(big.Int).SetBytes(bobBalanceAfter))
 
+	bob.balance = arrayToCT(bobEncryptBalanceAfter, bob.sk.Curve)
+	// create burn tx for bob
+	burnTxOb, err := CreateBurnTx(bob, bobExceptBalance)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	receiver := sender.From
+	tmpInfo := burnTxToOb(burnTxOb)
+	burnTxH, err := cs.PGC.Burn(sender, receiver, tmpInfo.amount, tmpInfo.pk, tmpInfo.proof, tmpInfo.z)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	t.Log("burn tx", burnTxH.Hash().Hex())
+
 }
 
 type transferTx struct {
@@ -240,6 +286,35 @@ type transferTx struct {
 	rpoints [16]*big.Int
 	l       [16]*big.Int
 	r       [16]*big.Int
+}
+
+type burnTx struct {
+	pk     [2]*big.Int
+	amount *big.Int
+	proof  [4]*big.Int
+	z      *big.Int
+}
+
+func newBurnTx() *burnTx {
+	tx := burnTx{}
+	tx.pk = [2]*big.Int{}
+	tx.proof = [4]*big.Int{}
+
+	return &tx
+}
+
+func burnTxToOb(b *BurnTx) *burnTx {
+	r := newBurnTx()
+	r.pk[0] = b.Account.X
+	r.pk[1] = b.Account.Y
+	r.amount = b.Amount
+	r.proof[0] = b.Proof.A1.X
+	r.proof[1] = b.Proof.A1.Y
+	r.proof[2] = b.Proof.A2.X
+	r.proof[3] = b.Proof.A2.Y
+	r.z = b.Proof.Z
+
+	return r
 }
 
 func newTransferTx() *transferTx {

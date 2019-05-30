@@ -24,6 +24,8 @@ contract PGC {
     //
     CT ct1;
     CT ct2;
+    uint[4] ct1Points;
+    uint[4] ct2Points;
     CT tmpUpdatedBalance;
     CT refreshBalance;
     BN128.G1Point[2] dleSigmaPoints;
@@ -62,7 +64,7 @@ contract PGC {
 
   // events
   event LogDepositAccount(address indexed proxy, uint tox, uint toy, uint amount, uint time);
-  event LogTransfer(address indexed proxy, uint fromx, uint fromy, uint tox, uint toy, uint time);
+  event LogTransfer(address indexed proxy, uint fromx, uint fromy, uint tox, uint toy, uint[4] amountSender, uint[4] amountFrom, uint time);
   event LogBurn(address indexed proxy, address indexed receiver, uint accountx, uint accounty, uint amount, uint time);
 
   //
@@ -165,6 +167,9 @@ contract PGC {
     // check balance updated is same with refreshed balance.
     b.ct1.X = BN128.G1Point(points[2], points[3]);
     b.ct1.Y = BN128.G1Point(points[4], points[5]);
+    for (uint i = 0; i < 4; i++) {
+      b.ct1Points[i] = points[2+i];
+    }
     CT storage userBalance = balance[points[0]][points[1]];
     // get tmp balance = alice'balnce - transfer'balance
     b.tmpUpdatedBalance.X = userBalance.X.add(b.ct1.X.neg());
@@ -215,10 +220,13 @@ contract PGC {
     CT storage receiverBalance = balance[points[6]][points [7]];
     b.ct2.X = BN128.G1Point(points[8], points[9]);
     b.ct2.Y = BN128.G1Point(points[10], points[11]);
+    for (uint i = 0; i < 4; i++) {
+      b.ct2Points[i] = points[8+i];
+    }
     receiverBalance.X = receiverBalance.X.add(b.ct2.X);
     receiverBalance.Y = receiverBalance.Y.add(b.ct2.Y);
 
-    emit LogTransfer(msg.sender, points[0], points[1], points[6], points[7], now);
+    emit LogTransfer(msg.sender, points[0], points[1], points[6], points[7], b.ct1Points, b.ct2Points, now);
 
     return true;
   }
