@@ -89,7 +89,7 @@ contract PGC {
    */
   function depositAccount(uint[2] memory publicKey) public payable returns(bool) {
     // check eth account.
-    require(msg.value > 1 ether, "eth deposited less than 1 eth");
+    require(msg.value >= 1 ether, "eth deposited less than 1 eth");
     require(msg.value/1 ether*1 ether == msg.value, "eth amount not an integer");
 
     // add amount to user account.
