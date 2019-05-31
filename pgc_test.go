@@ -144,7 +144,7 @@ func getRopstenAccount() *bind.TransactOpts {
 }
 
 func TestLocal(t *testing.T) {
-	url := "http://127.0.0.1:8545"
+	url := "http://192.168.1.115:8545"
 	rpcClient, _ := Dial(url)
 	client, _ := ethclient.Dial(url)
 

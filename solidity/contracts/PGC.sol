@@ -64,7 +64,7 @@ contract PGC {
 
   // events
   event LogDepositAccount(address indexed proxy, uint tox, uint toy, uint amount, uint time);
-  event LogTransfer(address indexed proxy, uint fromx, uint fromy, uint tox, uint toy, uint[4] amountSender, uint[4] amountFrom, uint time);
+  event LogTransfer(address indexed proxy, uint fromx, uint fromy, uint tox, uint toy, uint amountSenderXX, uint amountSenderXY, uint amountSenderYX, uint amountSenderYY, uint amountFromXX, uint amountFromXY, uint amountFromYX, uint amountFromYY, uint time);
   event LogBurn(address indexed proxy, address indexed receiver, uint accountx, uint accounty, uint amount, uint time);
 
   //
@@ -226,7 +226,7 @@ contract PGC {
     receiverBalance.X = receiverBalance.X.add(b.ct2.X);
     receiverBalance.Y = receiverBalance.Y.add(b.ct2.Y);
 
-    emit LogTransfer(msg.sender, points[0], points[1], points[6], points[7], b.ct1Points, b.ct2Points, now);
+    emit LogTransfer(msg.sender, points[0], points[1], points[6], points[7], b.ct1.X.X, b.ct1.X.Y, b.ct1.Y.X, b.ct1.Y.Y, b.ct2.X.X, b.ct2.X.Y, b.ct2.Y.X, b.ct2.Y.Y, now);
 
     return true;
   }
