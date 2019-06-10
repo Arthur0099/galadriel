@@ -15,6 +15,7 @@ contract PGC {
   struct CT {
     BN128.G1Point X;
     BN128.G1Point Y;
+    uint nonce;
   }
 
   //
@@ -29,6 +30,7 @@ contract PGC {
     CT tmpUpdatedBalance;
     CT refreshBalance;
     BN128.G1Point[2] dleSigmaPoints;
+    uint[12] dleTmpPoints;
 
     //
     uint[10] rpoints;
@@ -156,7 +158,11 @@ contract PGC {
    * l[2*n-4*n-1]: range proof 2 l.x, l.y.
    * r[2*n-4*n-1]: range proof 2 r.x, r.y.
    */
-  function transfer(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r) public returns(bool) {
+  function transfer(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint nonce, uint[2] memory sig) public returns(bool) {
+    // check for sig and nonce.
+    require(verifyTransferSig(points, scalar, rpoints, l, r, nonce, sig), "verify sig failed for transfertx");
+    CT storage userBalance = balance[points[0]][points[1]];
+    require(nonce == userBalance.nonce, "invalid nonce");
     Board memory b;
     // check v in ct1 == c in ct2.
     for (uint i = 0; i < 20; i++) {
@@ -170,7 +176,6 @@ contract PGC {
     for (uint i = 0; i < 4; i++) {
       b.ct1Points[i] = points[2+i];
     }
-    CT storage userBalance = balance[points[0]][points[1]];
     // get tmp balance = alice'balnce - transfer'balance
     b.tmpUpdatedBalance.X = userBalance.X.add(b.ct1.X.neg());
     b.tmpUpdatedBalance.Y = userBalance.Y.add(b.ct1.Y.neg());
@@ -215,6 +220,8 @@ contract PGC {
     // update sender's balance.
     userBalance.X = b.tmpUpdatedBalance.X;
     userBalance.Y = b.tmpUpdatedBalance.Y;
+    // update sender's nonce.
+    userBalance.nonce = nonce + 1;
 
     // update receiver's balance.
     CT storage receiverBalance = balance[points[6]][points [7]];
@@ -231,12 +238,13 @@ contract PGC {
     return true;
   }
 
-  function getUserBalance(uint x, uint y) public view returns (uint[4] memory ct) {
+  function getUserBalance(uint x, uint y) public view returns (uint[5] memory ct) {
     CT memory userBalance = balance[x][y];
     ct[0] = userBalance.X.X;
     ct[1] = userBalance.X.Y;
     ct[2] = userBalance.Y.X;
     ct[3] = userBalance.Y.Y;
+    ct[4] = userBalance.nonce;
     return ct;
   }
 
@@ -266,37 +274,40 @@ contract PGC {
    * proof[2-3]: A2 point.
    *
    */
-  function burn(address payable receiver, uint amount, uint[2] memory publicKey, uint[4] memory proof, uint z) public returns(bool) {
+  function burn(address payable receiver, uint amount, uint[2] memory publicKey, uint[4] memory proof, uint z, uint nonce, uint[2] memory sig) public returns(bool) {
+    // check for sig.
+    require(verifyBurnSig(uint(receiver), amount, publicKey, proof, z, nonce, sig), "invalid sig for burntx");
     // do nothing
-    if (amount < 1) {
-      return false;
-    }
+    require(amount >= 1, "invalid amount");
     // compute y' = Y - g*m.
     CT storage userBalance = balance[publicKey[0]][publicKey[1]];
+    require(nonce == userBalance.nonce, "invalid nonce");
     // todo: check not zero.
 
     BN128.G1Point memory y = userBalance.Y.add(g.mul(amount).neg());
-    uint[12] memory points;
-    points[0] = proof[0];
-    points[1] = proof[1];
-    points[2] = proof[2];
-    points[3] = proof[3];
-    points[4] = y.X;
-    points[5] = y.Y;
-    points[6] = userBalance.X.X;
-    points[7] = userBalance.X.Y;
-    points[8] = h.X;
-    points[9] = h.Y;
-    points[10] = publicKey[0];
-    points[11] = publicKey[1];
+    Board memory board;
+    board.dleTmpPoints[0] = proof[0];
+    board.dleTmpPoints[1] = proof[1];
+    board.dleTmpPoints[2] = proof[2];
+    board.dleTmpPoints[3] = proof[3];
+    board.dleTmpPoints[4] = y.X;
+    board.dleTmpPoints[5] = y.Y;
+    board.dleTmpPoints[6] = userBalance.X.X;
+    board.dleTmpPoints[7] = userBalance.X.Y;
+    board.dleTmpPoints[8] = h.X;
+    board.dleTmpPoints[9] = h.Y;
+    board.dleTmpPoints[10] = publicKey[0];
+    board.dleTmpPoints[11] = publicKey[1];
 
     // revert when error.
-    require(dleSigmaVerifier.verifyDLESigmaProof(points, z), "dle sigma verify failed");
+    require(dleSigmaVerifier.verifyDLESigmaProof(board.dleTmpPoints, z), "dle sigma verify failed");
 
     // update user encrypted balance.
-    CT memory updatedBalance = encrypt(0, BN128.G1Point(publicKey[0], publicKey[1]));
-    userBalance.X = updatedBalance.X;
-    userBalance.Y = updatedBalance.Y;
+    board.tmpUpdatedBalance = encrypt(0, BN128.G1Point(publicKey[0], publicKey[1]));
+    userBalance.X = board.tmpUpdatedBalance.X;
+    userBalance.Y = board.tmpUpdatedBalance.Y;
+    // update user nonce.
+    userBalance.nonce = nonce + 1;
 
     // transfer eth back to user.
     receiver.transfer(amount*1 ether);
@@ -322,5 +333,35 @@ contract PGC {
     ct.Y = g.mul(amount).add(h.mul(r));
 
     return ct;
+  }
+
+  /*
+   *
+   */
+  function verifyTransferSig(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint nonce, uint[2] memory sig) internal returns(bool) {
+    uint hash = uint(keccak256(abi.encodePacked(points, scalar, rpoints, l, r, nonce))).mod();
+    return verifySig(hash, points[0], points[1], sig[0], sig[1]);
+  }
+
+  /**
+   *
+   */
+  function verifyBurnSig(uint receiver, uint amount, uint[2] memory publicKey, uint[4] memory proof, uint z, uint nonce, uint[2] memory sig) public returns(bool) {
+    uint hash = uint(keccak256(abi.encodePacked(receiver, amount, publicKey, proof, z, nonce))).mod();
+    return verifySig(hash, publicKey[0], publicKey[1], sig[0], sig[1]);
+  }
+
+  /*
+   *
+   */
+  function verifySig(uint hash, uint pkx, uint pky, uint r, uint s) internal returns(bool) {
+    s = s.inv();
+    uint u1 = hash.mul(s);
+    uint u2 = r.mul(s);
+    BN128.G1Point memory res = h.mul(u1).add(BN128.G1Point(pkx, pky).mul(u2));
+    if (res.X != r) {
+      return false;
+    }
+    return true;
   }
 }

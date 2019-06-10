@@ -2,10 +2,14 @@ package pgc
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
+	"strings"
 	"unicode"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/pgc/contracts"
 )
 
 // ComputeChallenge computes challenge x using hash func(hash(pack(data))).
@@ -30,6 +34,58 @@ func ComputeChallenge(order *big.Int, data ...interface{}) (*big.Int, error) {
 	e = e.Mod(e, order)
 
 	return e, nil
+}
+
+// HashTransfer returns the hash of transfer input.
+func HashTransfer(tx *transferTx) ([]byte, error) {
+	parsed, err := abi.JSON(strings.NewReader(contracts.PgcABI))
+	if err != nil {
+		return nil, err
+	}
+
+	name := "transfer"
+	method, exist := parsed.Methods[name]
+	if !exist {
+		return nil, fmt.Errorf("method '%s' not found", name)
+	}
+
+	if len(method.Inputs) <= 1 {
+		return nil, fmt.Errorf("no enough inputs for compute hash for '%s", name)
+	}
+	// remove last input which is always sig.
+	arguments := method.Inputs[0 : len(method.Inputs)-1]
+	data, err := arguments.Pack(tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, tx.nonce)
+	if err != nil {
+		return nil, err
+	}
+
+	return Keccak256(data), nil
+}
+
+// HashBurn returns the hash of burn input.
+func HashBurn(receiver common.Address, tx *burnTx) ([]byte, error) {
+	parsed, err := abi.JSON(strings.NewReader(contracts.PgcABI))
+	if err != nil {
+		return nil, err
+	}
+
+	name := "verifyBurnSig"
+	method, exist := parsed.Methods[name]
+	if !exist {
+		return nil, fmt.Errorf("method '%s' not found", name)
+	}
+
+	if len(method.Inputs) <= 1 {
+		return nil, fmt.Errorf("no enough inputs for compute hash for '%s", name)
+	}
+	// remove last input which is always sig.
+	arguments := method.Inputs[0 : len(method.Inputs)-1]
+	data, err := arguments.Pack(new(big.Int).SetBytes(receiver.Bytes()), tx.amount, tx.pk, tx.proof, tx.z, tx.nonce)
+	if err != nil {
+		return nil, err
+	}
+
+	return Keccak256(data), nil
 }
 
 // BitVector returns vector containing the bits of v.

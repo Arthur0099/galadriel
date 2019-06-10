@@ -24,6 +24,23 @@ type CTX struct {
 	senderBalance, refreshUpdatedBalance *CTEncPoint
 }
 
+type transferTx struct {
+	points  [28]*big.Int
+	scalar  [14]*big.Int
+	rpoints [16]*big.Int
+	l       [16]*big.Int
+	r       [16]*big.Int
+	nonce   *big.Int
+}
+
+type burnTx struct {
+	pk     [2]*big.Int
+	amount *big.Int
+	proof  [4]*big.Int
+	z      *big.Int
+	nonce  *big.Int
+}
+
 // MarshalJSON defines custom way to JSON.
 func (ctx *CTX) MarshalJSON() ([]byte, error) {
 	newJSON := struct {
@@ -61,6 +78,7 @@ func CreateCTX(alice, bob *Account, v *big.Int) (*CTX, error) {
 	ctx.pk1 = &alice.sk.PublicKey
 	ctx.pk2 = &bob.sk.PublicKey
 	ctx.senderBalance = alice.balance
+	ctx.nonce = alice.nonce
 
 	// encrypt the transfer balance.
 	c1, err := Encrypt(ctx.pk1, v.Bytes())
@@ -91,8 +109,6 @@ func CreateCTX(alice, bob *Account, v *big.Int) (*CTX, error) {
 	}
 
 	ctx.refreshUpdatedBalance = refreshUpdatedBalance.CopyPublicPoint()
-	// update alice balance and bob balance
-	alice.balance = updatedBalance.Copy()
 
 	// generate proof to prove two ciphertexts encrypt the same value under same public key.
 	dleProof, err := GenerateDLESigmaProof(updatedBalance, refreshUpdatedBalance.CopyPublicPoint(), alice.sk)
@@ -107,6 +123,11 @@ func CreateCTX(alice, bob *Account, v *big.Int) (*CTX, error) {
 		return nil, err
 	}
 	ctx.rangeProof2 = rangeProof2
+
+	// update info.
+	// update alice balance and bob balance
+	alice.balance = updatedBalance.Copy()
+	alice.nonce = alice.nonce + 1
 
 	return &ctx, nil
 }
@@ -163,11 +184,13 @@ type BurnTx struct {
 	Account *ECPoint       `json:"account"`
 	Amount  *big.Int       `json:"amount"`
 	Proof   *DLESigmaProof `json:"proof"`
+	Nonce   *big.Int       `json:"nonce"`
 }
 
 // CreateBurnTx creates tx to burn an account.
 func CreateBurnTx(alice *Account, amount *big.Int) (*BurnTx, error) {
 	tx := BurnTx{}
+	tx.Nonce = new(big.Int).SetUint64(alice.nonce)
 
 	//
 	tx.Account = new(ECPoint).SetFromPublicKey(&alice.sk.PublicKey)
@@ -185,6 +208,8 @@ func CreateBurnTx(alice *Account, amount *big.Int) (*BurnTx, error) {
 	}
 
 	tx.Proof = proof
+	alice.nonce = alice.nonce + 1
+	// todo: update alice's balance.
 
 	return &tx, nil
 }

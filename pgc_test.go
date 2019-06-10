@@ -151,6 +151,7 @@ func TestLocal(t *testing.T) {
 	senderKey, _ := crypto.GenerateKey()
 	sender := bind.NewKeyedTransactor(senderKey)
 	sender.GasLimit = 8000000
+	sender.GasPrice = new(big.Int).SetUint64(100 * 1000 * 1000 * 1000)
 	accounts, _ := rpcClient.GetAccounts()
 
 	amount := new(big.Int).SetUint64(10000)
@@ -165,6 +166,7 @@ func TestLocal(t *testing.T) {
 
 func TestRopsten(t *testing.T) {
 	sender := getRopstenAccount()
+	sender.GasPrice = new(big.Int).SetUint64(10 * 1000 * 1000 * 1000)
 	url := "https://ropsten.infura.io/v3/10d08c76bb104f6286f774ec21fa7ac9"
 
 	client, _ := ethclient.Dial(url)
@@ -230,8 +232,19 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 
 	// send transfer tx to contract on chain.
 	tx := ctxToTransferTx(ctx)
+	//
+	transferHash, err := HashTransfer(tx)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	transferSig, err := Sign(alice.sk, transferHash)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 	sender.Value = nil
-	transferTxHash, err := cs.PGC.Transfer(sender, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r)
+	transferTxHash, err := cs.PGC.Transfer(sender, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, tx.nonce, transferSig.ToInputs())
 	if err != nil {
 		t.Error(err)
 		return
@@ -270,7 +283,18 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 	}
 	receiver := sender.From
 	tmpInfo := burnTxToOb(burnTxOb)
-	burnTxH, err := cs.PGC.Burn(sender, receiver, tmpInfo.amount, tmpInfo.pk, tmpInfo.proof, tmpInfo.z)
+	burnHash, err := HashBurn(receiver, tmpInfo)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	burnSig, err := Sign(bob.sk, burnHash)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	burnTxH, err := cs.PGC.Burn(sender, receiver, tmpInfo.amount, tmpInfo.pk, tmpInfo.proof, tmpInfo.z, tmpInfo.nonce, burnSig.ToInputs())
 	if err != nil {
 		t.Error(err)
 		return
@@ -278,21 +302,6 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 
 	t.Log("burn tx", burnTxH.Hash().Hex())
 
-}
-
-type transferTx struct {
-	points  [28]*big.Int
-	scalar  [14]*big.Int
-	rpoints [16]*big.Int
-	l       [16]*big.Int
-	r       [16]*big.Int
-}
-
-type burnTx struct {
-	pk     [2]*big.Int
-	amount *big.Int
-	proof  [4]*big.Int
-	z      *big.Int
 }
 
 func newBurnTx() *burnTx {
@@ -305,6 +314,7 @@ func newBurnTx() *burnTx {
 
 func burnTxToOb(b *BurnTx) *burnTx {
 	r := newBurnTx()
+	r.nonce = b.Nonce
 	r.pk[0] = b.Account.X
 	r.pk[1] = b.Account.Y
 	r.amount = b.Amount
@@ -328,7 +338,7 @@ func newTransferTx() *transferTx {
 	return &tx
 }
 
-func arrayToCT(p [4]*big.Int, curve elliptic.Curve) *CTEncPoint {
+func arrayToCT(p [5]*big.Int, curve elliptic.Curve) *CTEncPoint {
 	c := CTEncPoint{}
 	c.X = NewECPoint(p[0], p[1], curve)
 	c.Y = NewECPoint(p[2], p[3], curve)
@@ -338,6 +348,7 @@ func arrayToCT(p [4]*big.Int, curve elliptic.Curve) *CTEncPoint {
 
 func ctxToTransferTx(ctx *CTX) *transferTx {
 	tx := newTransferTx()
+	tx.nonce = new(big.Int).SetUint64(ctx.nonce)
 	tx.points[0] = ctx.pk1.X
 	tx.points[1] = ctx.pk1.Y
 	tx.points[2] = ctx.c1.X.X
