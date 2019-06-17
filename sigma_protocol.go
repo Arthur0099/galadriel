@@ -273,6 +273,17 @@ func GenerateDLESigmaProof(ori, refresh *CTEncPoint, sk *ecdsa.PrivateKey) (*DLE
 	return generateDLESimaProof(g1, h1, g2, h2, w)
 }
 
+// GenerateEqualProof generates a proof to prove amount is same with value in encrypted ct.
+func GenerateEqualProof(amount *big.Int, ct *CTEncPoint, sk *ecdsa.PrivateKey) (*DLESigmaProof, error) {
+	g1 := new(ECPoint).Sub(ct.Y, new(ECPoint).ScalarMult(params.GetG(), amount))
+	h1 := ct.X
+	g2 := params.GetH()
+	h2 := new(ECPoint).SetFromPublicKey(&sk.PublicKey)
+	w := new(big.Int).Set(sk.D)
+
+	return generateDLESimaProof(g1, h1, g2, h2, w)
+}
+
 // generateDLESigmaProof generates items to prove g1 ^ w == h1; g2 ^ w == h2; w==w.
 func generateDLESimaProof(g1, h1, g2, h2 *ECPoint, w *big.Int) (*DLESigmaProof, error) {
 	//

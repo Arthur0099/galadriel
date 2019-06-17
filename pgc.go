@@ -41,6 +41,16 @@ type burnTx struct {
 	nonce  *big.Int
 }
 
+type burnPartTx struct {
+	amount  *big.Int
+	points  [18]*big.Int
+	scalar  [12]*big.Int
+	rpoints [16]*big.Int
+	l       [16]*big.Int
+	r       [16]*big.Int
+	nonce   *big.Int
+}
+
 // MarshalJSON defines custom way to JSON.
 func (ctx *CTX) MarshalJSON() ([]byte, error) {
 	newJSON := struct {
@@ -132,6 +142,77 @@ func CreateCTX(alice, bob *Account, v *big.Int) (*CTX, error) {
 	return &ctx, nil
 }
 
+// BurnPartTx represent a tx to burn part/all balance of a pgc amount.
+type BurnPartTx struct {
+	nonce  uint64
+	pk     *ecdsa.PublicKey
+	amount *big.Int
+	// encry amount.
+	ct *CTEncPoint
+	// proof 1 to prove amount is same with balance in ct.
+	// proof 2 to prove account's updated balance is same with
+	// refreshBalance.
+	dleProof1, dleProof2 *DLESigmaProof
+	refreshBalance       *CTEncPoint
+	// proof 1 to prove amount in range.
+	// proof 2 to prove account's balance - amount in range.
+	proof1, proof2 *RangeProof
+}
+
+// CreateBurnPartTx creates tx to burn part or all balance of a pgc amount.
+func CreateBurnPartTx(alice *Account, amount *big.Int) (*BurnPartTx, error) {
+	burnPartTx := BurnPartTx{}
+	burnPartTx.pk = &alice.sk.PublicKey
+	burnPartTx.nonce = alice.nonce
+	burnPartTx.amount = new(big.Int).Set(amount)
+
+	// encrypt amount.
+	ct, err := Encrypt(burnPartTx.pk, amount.Bytes())
+	if err != nil {
+		return nil, err
+	}
+	burnPartTx.ct = ct.CopyPublicPoint()
+
+	// generate proof to prove amount is same with value in ct.
+	dleProof1, err := GenerateEqualProof(amount, ct.CopyPublicPoint(), alice.sk)
+	if err != nil {
+		return nil, err
+	}
+	burnPartTx.dleProof1 = dleProof1
+
+	// generate proof.
+	proof1, err := GenerateRangeProof(params.GetVB(), amount, ct.R)
+	if err != nil {
+		return nil, err
+	}
+	burnPartTx.proof1 = proof1
+
+	// update balace of alice.
+	updatedBalance := new(CTEncPoint).Sub(alice.balance, ct.CopyPublicPoint())
+	refreshBalance, err := Refresh(alice.sk, updatedBalance)
+	if err != nil {
+		return nil, err
+	}
+	burnPartTx.refreshBalance = refreshBalance.CopyPublicPoint()
+	//
+	dleProof2, err := GenerateDLESigmaProof(updatedBalance, refreshBalance.CopyPublicPoint(), alice.sk)
+	if err != nil {
+		return nil, err
+	}
+	burnPartTx.dleProof2 = dleProof2
+	proof2, err := GenerateRangeProof(params.GetVB(), new(big.Int).Sub(alice.m, amount), refreshBalance.R)
+	if err != nil {
+		return nil, err
+	}
+	burnPartTx.proof2 = proof2
+
+	// update info.
+	alice.balance = updatedBalance.Copy()
+	alice.nonce = alice.nonce + 1
+
+	return &burnPartTx, nil
+}
+
 // VerifyCTX checks the ctx is valid or not.
 func VerifyCTX(ctx *CTX) bool {
 	params := Params()
@@ -198,11 +279,7 @@ func CreateBurnTx(alice *Account, amount *big.Int) (*BurnTx, error) {
 
 	// generate proof to prove alice has the sk and the amount is indeed same with value encrypted.
 	// alice's encrypted balance should be right set.
-	params := Params()
-
-	g1 := new(ECPoint).Sub(alice.balance.Y, new(ECPoint).ScalarMult(params.GetG(), amount))
-
-	proof, err := generateDLESimaProof(g1, alice.balance.X, params.GetH(), new(ECPoint).SetFromPublicKey(&alice.sk.PublicKey), alice.sk.D)
+	proof, err := GenerateEqualProof(amount, alice.balance, alice.sk)
 	if err != nil {
 		return nil, err
 	}

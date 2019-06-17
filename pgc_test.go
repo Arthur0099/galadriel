@@ -275,15 +275,17 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 	t.Log("bob's balance after is ", new(big.Int).SetBytes(bobBalanceAfter))
 
 	bob.balance = arrayToCT(bobEncryptBalanceAfter, bob.sk.Curve)
+	bob.m = new(big.Int).Set(bobExceptBalance)
 	// create burn tx for bob
-	burnTxOb, err := CreateBurnTx(bob, bobExceptBalance)
+	burnAmount := new(big.Int).SetUint64(5)
+	burnPartTx, err := CreateBurnPartTx(bob, burnAmount)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	receiver := sender.From
-	tmpInfo := burnTxToOb(burnTxOb)
-	burnHash, err := HashBurn(receiver, tmpInfo)
+	tmpInfo := txToBurnPartTx(burnPartTx)
+	burnHash, err := HashBurnPart(receiver, tmpInfo)
 	if err != nil {
 		t.Error(err)
 		return
@@ -294,14 +296,26 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 		return
 	}
 
-	burnTxH, err := cs.PGC.Burn(sender, receiver, tmpInfo.amount, tmpInfo.pk, tmpInfo.proof, tmpInfo.z, tmpInfo.nonce, burnSig.ToInputs())
+	burnTxH, err := cs.PGC.BurnPart(sender, receiver, tmpInfo.amount, tmpInfo.points, tmpInfo.scalar, tmpInfo.rpoints, tmpInfo.l, tmpInfo.r, tmpInfo.nonce, burnSig.ToInputs())
 	if err != nil {
 		t.Error(err)
 		return
 	}
+	t.Log("burn part tx", burnTxH.Hash().Hex(), "burn amount", burnAmount)
+	waitFor(burnTxH.Hash(), client)
 
-	t.Log("burn tx", burnTxH.Hash().Hex())
-
+	// check bob's balance.
+	bobFinalEncBalance, _ := cs.PGC.GetUserBalance(nil, bobPK[0], bobPK[1])
+	bobf := Decrypt(bob.sk, arrayToCT(bobFinalEncBalance, bob.sk.Curve))
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	t.Log("bob's final balance", "amount", new(big.Int).SetBytes(bobf))
+	finalExpect := new(big.Int).Sub(new(big.Int).SetBytes(bobBalanceAfter), burnAmount)
+	if finalExpect.Cmp(new(big.Int).SetBytes(bobf)) != 0 {
+		t.Error("bob's balance not correct")
+	}
 }
 
 func newBurnTx() *burnTx {
@@ -338,12 +352,96 @@ func newTransferTx() *transferTx {
 	return &tx
 }
 
+func newBurnPartTx() *burnPartTx {
+	tx := burnPartTx{}
+	tx.points = [18]*big.Int{}
+	tx.scalar = [12]*big.Int{}
+	tx.rpoints = [16]*big.Int{}
+	tx.l = [16]*big.Int{}
+	tx.r = [16]*big.Int{}
+
+	return &tx
+}
+
 func arrayToCT(p [5]*big.Int, curve elliptic.Curve) *CTEncPoint {
 	c := CTEncPoint{}
 	c.X = NewECPoint(p[0], p[1], curve)
 	c.Y = NewECPoint(p[2], p[3], curve)
 
 	return &c
+}
+
+func txToBurnPartTx(tx *BurnPartTx) *burnPartTx {
+	partTx := newBurnPartTx()
+
+	partTx.amount = new(big.Int).Set(tx.amount)
+	partTx.nonce = new(big.Int).SetUint64(tx.nonce)
+	partTx.points[0] = tx.pk.X
+	partTx.points[1] = tx.pk.Y
+	partTx.points[2] = tx.ct.X.X
+	partTx.points[3] = tx.ct.X.Y
+	partTx.points[4] = tx.ct.Y.X
+	partTx.points[5] = tx.ct.Y.Y
+	partTx.points[6] = tx.refreshBalance.X.X
+	partTx.points[7] = tx.refreshBalance.X.Y
+	partTx.points[8] = tx.refreshBalance.Y.X
+	partTx.points[9] = tx.refreshBalance.Y.Y
+	partTx.points[10] = tx.dleProof1.A1.X
+	partTx.points[11] = tx.dleProof1.A1.Y
+	partTx.points[12] = tx.dleProof1.A2.X
+	partTx.points[13] = tx.dleProof1.A2.Y
+	partTx.points[14] = tx.dleProof2.A1.X
+	partTx.points[15] = tx.dleProof2.A1.Y
+	partTx.points[16] = tx.dleProof2.A2.X
+	partTx.points[17] = tx.dleProof2.A2.Y
+
+	partTx.scalar[0] = tx.dleProof1.Z
+	partTx.scalar[1] = tx.dleProof2.Z
+
+	partTx.scalar[2] = tx.proof1.t
+	partTx.scalar[3] = tx.proof1.tx
+	partTx.scalar[4] = tx.proof1.u
+	partTx.scalar[5] = tx.proof1.ipProof.a
+	partTx.scalar[6] = tx.proof1.ipProof.b
+
+	partTx.scalar[7] = tx.proof2.t
+	partTx.scalar[8] = tx.proof2.tx
+	partTx.scalar[9] = tx.proof2.u
+	partTx.scalar[10] = tx.proof2.ipProof.a
+	partTx.scalar[11] = tx.proof2.ipProof.b
+
+	partTx.rpoints[0] = tx.proof1.A.X
+	partTx.rpoints[1] = tx.proof1.A.Y
+	partTx.rpoints[2] = tx.proof1.S.X
+	partTx.rpoints[3] = tx.proof1.S.Y
+	partTx.rpoints[4] = tx.proof1.T1.X
+	partTx.rpoints[5] = tx.proof1.T1.Y
+	partTx.rpoints[6] = tx.proof1.T2.X
+	partTx.rpoints[7] = tx.proof1.T2.Y
+
+	partTx.rpoints[8] = tx.proof2.A.X
+	partTx.rpoints[9] = tx.proof2.A.Y
+	partTx.rpoints[10] = tx.proof2.S.X
+	partTx.rpoints[11] = tx.proof2.S.Y
+	partTx.rpoints[12] = tx.proof2.T1.X
+	partTx.rpoints[13] = tx.proof2.T1.Y
+	partTx.rpoints[14] = tx.proof2.T2.X
+	partTx.rpoints[15] = tx.proof2.T2.Y
+
+	base := len(tx.proof1.ipProof.L) * 2
+	for i, v := range tx.proof1.ipProof.L {
+		partTx.l[2*i] = v.X
+		partTx.l[2*i+1] = v.Y
+		partTx.r[2*i] = tx.proof1.ipProof.R[i].X
+		partTx.r[2*i+1] = tx.proof1.ipProof.R[i].Y
+
+		partTx.l[2*i+base] = tx.proof2.ipProof.L[i].X
+		partTx.l[2*i+1+base] = tx.proof2.ipProof.L[i].Y
+		partTx.r[2*i+base] = tx.proof2.ipProof.R[i].X
+		partTx.r[2*i+1+base] = tx.proof2.ipProof.R[i].Y
+	}
+
+	return partTx
 }
 
 func ctxToTransferTx(ctx *CTX) *transferTx {

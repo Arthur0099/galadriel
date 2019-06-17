@@ -88,6 +88,31 @@ func HashBurn(receiver common.Address, tx *burnTx) ([]byte, error) {
 	return Keccak256(data), nil
 }
 
+// HashBurnPart returns hash of burnPart.
+func HashBurnPart(receiver common.Address, tx *burnPartTx) ([]byte, error) {
+	parsed, err := abi.JSON(strings.NewReader(contracts.PgcABI))
+	if err != nil {
+		return nil, err
+	}
+
+	name := "verifyBurnPartSig"
+	method, exist := parsed.Methods[name]
+	if !exist {
+		return nil, fmt.Errorf("method '%s' not found", name)
+	}
+
+	if len(method.Inputs) <= 1 {
+		return nil, fmt.Errorf("no enough inputs for compute hash for '%s", name)
+	}
+	arguments := method.Inputs[0 : len(method.Inputs)-1]
+	data, err := arguments.Pack(new(big.Int).SetBytes(receiver.Bytes()), tx.amount, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, tx.nonce)
+	if err != nil {
+		return nil, err
+	}
+
+	return Keccak256(data), nil
+}
+
 // BitVector returns vector containing the bits of v.
 // v = <al, 2 ^ n>. and all items in al are {0, 1}
 func BitVector(v *big.Int, n int) ([]*big.Int, error) {
