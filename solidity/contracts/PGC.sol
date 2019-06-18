@@ -49,6 +49,12 @@ contract PGC {
   uint public constant bitSize = 16;
   uint public constant n = 4;
 
+  // decimal.
+  uint public constant decimal = 2;
+  uint private rate = 10**decimal;
+
+  uint precision = 1 ether / rate;
+
   // public h point.
   BN128.G1Point public h;
 
@@ -96,18 +102,18 @@ contract PGC {
    */
   function depositAccount(uint[2] memory publicKey) public payable returns(bool) {
     // check eth account.
-    require(msg.value >= 1 ether, "eth deposited less than 1 eth");
-    require(msg.value/1 ether*1 ether == msg.value, "eth amount not an integer");
+    require(msg.value >= precision, "eth deposited less than 1 eth");
+    require(msg.value/precision*precision == msg.value, "invalid precision");
 
     // add amount to user account.
-    uint amount = msg.value/1 ether;
+    uint amount = msg.value/precision;
 
     CT storage userBalance = balance[publicKey[0]][publicKey[1]];
     CT memory deposited = encrypt(amount, BN128.G1Point(publicKey[0], publicKey[1]));
     userBalance.X = userBalance.X.add(deposited.X);
     userBalance.Y = userBalance.Y.add(deposited.Y);
 
-    emit LogDepositAccount(msg.sender, publicKey[0], publicKey[1], msg.value, now);
+    emit LogDepositAccount(msg.sender, publicKey[0], publicKey[1], amount, now);
 
     return true;
   }
@@ -388,7 +394,7 @@ contract PGC {
     userBalance.nonce = nonce + 1;
 
     // transfer eth.
-    receiver.transfer(amount * 1 ether);
+    receiver.transfer(amount * precision);
 
     // emit event.
     emit LogBurnPart(msg.sender, receiver, points[0], points[1], amount, now);
@@ -427,9 +433,9 @@ contract PGC {
     userBalance.nonce = nonce + 1;
 
     // transfer eth back to user.
-    receiver.transfer(amount*1 ether);
+    receiver.transfer(amount*precision);
 
-    emit LogBurn(msg.sender, receiver, publicKey[0], publicKey[1], amount*1 ether, now);
+    emit LogBurn(msg.sender, receiver, publicKey[0], publicKey[1], amount, now);
   }
 
   /*

@@ -8,6 +8,12 @@ import (
 	log "github.com/inconshreveable/log15"
 )
 
+var (
+	decimal   = new(big.Int).SetUint64(2)
+	base      = new(big.Int).SetUint64(10)
+	precision = new(big.Int).Exp(base, decimal, nil)
+)
+
 // CTX represents a encrypted tx on chain.
 type CTX struct {
 	nonce uint64

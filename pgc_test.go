@@ -180,9 +180,10 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 	cs := DeployPGCContracts(sender, client)
 
 	// generate alice, bob account.
-	aliceInitBalance := new(big.Int).SetUint64(5)
+	aliceInitBalance := new(big.Int).SetUint64(500)
 	alice := CreateTestAccount("alice", aliceInitBalance)
 	sender.Value = new(big.Int).Mul(ether, aliceInitBalance)
+	sender.Value.Div(sender.Value, precision)
 	alicePK := [2]*big.Int{alice.sk.PublicKey.X, alice.sk.PublicKey.Y}
 	aliceTx, err := cs.PGC.DepositAccount(sender, alicePK)
 	if err != nil {
@@ -194,16 +195,17 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 	aliceEncryptB, _ := cs.PGC.GetUserBalance(nil, alice.sk.PublicKey.X, alice.sk.PublicKey.Y)
 	aliceDecryptB := Decrypt(alice.sk, arrayToCT(aliceEncryptB, alice.sk.Curve))
 	if aliceInitBalance.Cmp(new(big.Int).SetBytes(aliceDecryptB)) != 0 {
-		t.Error("encrypt on chain not same alice")
+		t.Error("encrypt on chain not same alice", aliceInitBalance, new(big.Int).SetBytes(aliceDecryptB))
 		return
 	}
 	// keep balance same with chain.
 	alice.balance = arrayToCT(aliceEncryptB, alice.sk.Curve)
 
 	// generate bob.
-	bobInitBalance := new(big.Int).SetUint64(5)
+	bobInitBalance := new(big.Int).SetUint64(500)
 	bob := CreateTestAccount("bob", bobInitBalance)
 	sender.Value = new(big.Int).Mul(ether, bobInitBalance)
+	sender.Value.Div(sender.Value, precision)
 	sender.Nonce.Add(sender.Nonce, one)
 	bobPK := [2]*big.Int{bob.sk.PublicKey.X, bob.sk.PublicKey.Y}
 	bobTx, err := cs.PGC.DepositAccount(sender, bobPK)
@@ -223,7 +225,7 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 	// keep balance same with chain.
 	bob.balance = arrayToCT(bobEncryptB, bob.sk.Curve)
 
-	transferAmount := new(big.Int).SetUint64(3)
+	transferAmount := new(big.Int).SetUint64(300)
 	ctx, err := CreateCTX(alice, bob, transferAmount)
 	if err != nil {
 		t.Error(err)
@@ -277,7 +279,7 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 	bob.balance = arrayToCT(bobEncryptBalanceAfter, bob.sk.Curve)
 	bob.m = new(big.Int).Set(bobExceptBalance)
 	// create burn tx for bob
-	burnAmount := new(big.Int).SetUint64(5)
+	burnAmount := new(big.Int).SetUint64(50)
 	burnPartTx, err := CreateBurnPartTx(bob, burnAmount)
 	if err != nil {
 		t.Error(err)
