@@ -71,6 +71,7 @@ contract PGC {
   event LogDepositAccount(address indexed proxy, uint tox, uint toy, uint amount, uint time);
   event LogTransfer(address indexed proxy, uint fromx, uint fromy, uint tox, uint toy, uint amountSenderXX, uint amountSenderXY, uint amountSenderYX, uint amountSenderYY, uint amountFromXX, uint amountFromXY, uint amountFromYX, uint amountFromYY, uint time);
   event LogBurn(address indexed proxy, address indexed receiver, uint accountx, uint accounty, uint amount, uint time);
+  event LogBurnPart(address indexed proxy, address indexed receiver, uint accountx, uint accounty, uint amount, uint time);
 
   //
   constructor(address params_, address dleSigmaVerifier_, address rangeProofVerifier_, address sigmaVerifier_) public {
@@ -320,6 +321,7 @@ contract PGC {
    * r[2*n-4*n-1]: range proof 2 r.x, r.y.
    */
   function burnPart(address payable receiver, uint amount, uint[18] memory points, uint[12] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint nonce, uint[2] memory sig) public returns(bool) {
+    require(amount >= 1, "invalid amount");
     // check sig.
     require(verifyBurnPartSig(uint(receiver), amount, points, scalar, rpoints, l, r, nonce, sig), "verify sig failed for burn part");
 
@@ -389,6 +391,7 @@ contract PGC {
     receiver.transfer(amount * 1 ether);
 
     // emit event.
+    emit LogBurnPart(msg.sender, receiver, points[0], points[1], amount, now);
   }
 
 
