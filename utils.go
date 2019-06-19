@@ -84,6 +84,7 @@ func HashBurn(receiver common.Address, tx *burnTx) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("%x\n", data)
 
 	return Keccak256(data), nil
 }

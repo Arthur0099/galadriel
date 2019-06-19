@@ -23,6 +23,7 @@ func Sign(sk *ecdsa.PrivateKey, data []byte) (*Sig, error) {
 	if err != nil {
 		return nil, err
 	}
+	r.SetUint64(112)
 
 	params := Params()
 	A := new(ECPoint).ScalarMult(params.GetH(), r)

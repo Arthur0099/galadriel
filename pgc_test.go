@@ -4,8 +4,10 @@ import (
 	"crypto/elliptic"
 	"encoding/json"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/pgc/contracts"
 	"math/big"
 	"testing"
 )
@@ -60,6 +62,59 @@ func (d *DepositTest) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(&newJSON)
+}
+
+// special test.
+func TestBurnSpecial(t *testing.T) {
+	hexKey := "05cddb0663078bcc9f319a855315ac4432e18dde230856d4f76c98fb22fdaf7d"
+
+	sender := getRopstenAccount()
+	sender.GasLimit = 3000000
+	alice, _ := HexToKey(hexKey)
+
+	contractAddr := common.HexToAddress("0x02af4595482023d0bfae2a9f9651f8b931902ddd")
+
+	url := "https://ropsten.infura.io/v3/10d08c76bb104f6286f774ec21fa7ac9"
+
+	client, _ := ethclient.Dial(url)
+
+	pgcContract, _ := contracts.NewPgc(contractAddr, client)
+	userBalance, _ := pgcContract.GetUserBalance(nil, alice.PublicKey.X, alice.PublicKey.Y)
+
+	amount := new(big.Int).SetUint64(2)
+	account := CreateTestAccount("", new(big.Int).SetUint64(2))
+	t.Log(userBalance[4].Uint64())
+	account.nonce = userBalance[4].Uint64()
+	account.balance = arrayToCT(userBalance, alice.Curve)
+	account.sk = alice
+
+	t.Log(account.balance.X.X, account.balance.X.Y, account.balance.Y.X, account.balance.Y.Y)
+
+	t.Log(common.BigToHash(account.sk.X).Hex(), common.BigToHash(account.sk.Y).Hex())
+	key, err := crypto.HexToECDSA(hexKey)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	t.Log(common.BigToHash(key.X).Hex(), common.BigToHash(key.Y).Hex())
+
+	//
+	burnTxOb, err := CreateBurnTx(account, new(big.Int).SetUint64(2))
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	burnTx := burnTxToOb(burnTxOb)
+	hash, _ := HashBurn(sender.From, burnTx)
+	t.Log(common.BytesToHash(hash).Hex())
+	sig, _ := Sign(account.sk, hash)
+
+	tx, err := pgcContract.Burn(sender, sender.From, amount, burnTx.pk, burnTx.proof, burnTx.z, burnTx.nonce, sig.ToInputs())
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	t.Log(tx.Hash().Hex())
 }
 
 // to test on chain.
@@ -130,6 +185,15 @@ func TestDepositBurn(t *testing.T) {
 
 	path := "solidity/proofs/depositBurn"
 	WriteToFile(data, path)
+}
+
+func getAccountByHexKey(hexKey string) *bind.TransactOpts {
+	key, err := crypto.HexToECDSA(hexKey)
+	if err != nil {
+		panic(err)
+	}
+
+	return bind.NewKeyedTransactor(key)
 }
 
 func getRopstenAccount() *bind.TransactOpts {

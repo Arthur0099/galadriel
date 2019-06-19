@@ -293,6 +293,7 @@ func generateDLESimaProof(g1, h1, g2, h2 *ECPoint, w *big.Int) (*DLESigmaProof, 
 	if err != nil {
 		return nil, err
 	}
+	a.SetUint64(0)
 
 	// A1 = g1 * a; A2 = g2 * a.
 	A1 := new(ECPoint).ScalarMult(g1, a)

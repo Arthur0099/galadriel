@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"io"
 	"math/big"
@@ -133,6 +134,22 @@ func GenerateKey() (priv *ecdsa.PrivateKey, err error) {
 	priv.D = k
 	// Warng: x, y == h * sk.
 	priv.PublicKey.X, priv.PublicKey.Y = curve.ScalarMult(h.X, h.Y, k.Bytes())
+	return
+}
+
+// HexToKey returns key pair by hex.
+func HexToKey(hexKey string) (priv *ecdsa.PrivateKey, err error) {
+	b, err := hex.DecodeString(hexKey)
+	if err != nil {
+		return nil, err
+	}
+
+	params := Params()
+	h := params.GetH()
+	priv = new(ecdsa.PrivateKey)
+	priv.PublicKey.Curve = params.Curve()
+	priv.D = new(big.Int).SetBytes(b)
+	priv.PublicKey.X, priv.PublicKey.Y = params.Curve().ScalarMult(h.X, h.Y, b)
 	return
 }
 
