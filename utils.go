@@ -12,6 +12,12 @@ import (
 	"github.com/pgc/contracts"
 )
 
+var (
+	// GWEI is the uint of gas price
+	GWEI         = new(big.Int).SetUint64(1000 * 1000 * 1000)
+	testGasLimit = uint64(7000000)
+)
+
 // ComputeChallenge computes challenge x using hash func(hash(pack(data))).
 // todo: same with Keccak256(a1, a2, b1, b2) in solidity.
 // use abi.Arguments.Pack(A1, A2, B1, B2)

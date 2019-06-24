@@ -34,3 +34,10 @@ func CreateTestAccount(name string, balance *big.Int) *Account {
 
 	return &a
 }
+
+// UpdateBalance updates user's encrypted balance and nonce.
+func (a *Account) UpdateBalance(data [5]*big.Int) {
+	a.balance.X = NewECPoint(data[0], data[1], a.sk.Curve)
+	a.balance.Y = NewECPoint(data[2], data[3], a.sk.Curve)
+	a.nonce = data[4].Uint64()
+}

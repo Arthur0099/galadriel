@@ -26,7 +26,6 @@ type CTX struct {
 	// proof proving DLESigmaProof.
 	dleProof *DLESigmaProof
 
-	//
 	senderBalance, refreshUpdatedBalance *CTEncPoint
 }
 
@@ -86,13 +85,13 @@ func (ctx *CTX) MarshalJSON() ([]byte, error) {
 
 // CreateCTX creates en encrypt tx for transfering v balance from
 // alice account to bob account.
-func CreateCTX(alice, bob *Account, v *big.Int) (*CTX, error) {
+func CreateCTX(alice *Account, bob *ecdsa.PublicKey, v *big.Int) (*CTX, error) {
 	log.Debug("create ctx")
 	params := Params()
 
 	ctx := CTX{}
 	ctx.pk1 = &alice.sk.PublicKey
-	ctx.pk2 = &bob.sk.PublicKey
+	ctx.pk2 = bob
 	ctx.senderBalance = alice.balance
 	ctx.nonce = alice.nonce
 
@@ -279,7 +278,6 @@ func CreateBurnTx(alice *Account, amount *big.Int) (*BurnTx, error) {
 	tx := BurnTx{}
 	tx.Nonce = new(big.Int).SetUint64(alice.nonce)
 
-	//
 	tx.Account = new(ECPoint).SetFromPublicKey(&alice.sk.PublicKey)
 	tx.Amount = new(big.Int).Set(amount)
 
@@ -292,7 +290,6 @@ func CreateBurnTx(alice *Account, amount *big.Int) (*BurnTx, error) {
 
 	tx.Proof = proof
 	alice.nonce = alice.nonce + 1
-	// todo: update alice's balance.
 
 	return &tx, nil
 }

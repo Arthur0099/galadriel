@@ -4,10 +4,9 @@ import (
 	"crypto/elliptic"
 	"encoding/json"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/pgc/contracts"
+	"github.com/stretchr/testify/require"
 	"math/big"
 	"testing"
 )
@@ -15,30 +14,25 @@ import (
 var ether = new(big.Int).SetUint64(1000 * 1000 * 1000 * 1000 * 1000 * 1000)
 
 func TestPGC(t *testing.T) {
+	// create alice account.
 	aliceBalance := new(big.Int).SetUint64(12)
 	alice := CreateTestAccount("alice", aliceBalance)
 
+	// create bob account.
 	bobBalance := new(big.Int).SetUint64(12)
 	bob := CreateTestAccount("bob", bobBalance)
 
 	transferBalance := new(big.Int).SetUint64(2)
 
-	ctx, err := CreateCTX(alice, bob, transferBalance)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	// create ctx.
+	ctx, err := CreateCTX(alice, &bob.sk.PublicKey, transferBalance)
+	require.Nil(t, err, "create ctx failed")
+	require.True(t, VerifyCTX(ctx), "verify valid ctx failed")
 
-	if !VerifyCTX(ctx) {
-		t.Error("verify valid tx failed")
-		return
-	}
-
+	// check for balance.
 	balanceAfter := new(big.Int).SetBytes(Decrypt(alice.sk, alice.balance))
 	except := new(big.Int).Sub(aliceBalance, transferBalance)
-	if except.Cmp(balanceAfter) != 0 {
-		t.Error("balance after not correct")
-	}
+	require.Equal(t, balanceAfter, except, "")
 }
 
 // depoist/burn account should be same.
@@ -62,59 +56,6 @@ func (d *DepositTest) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(&newJSON)
-}
-
-// special test.
-func TestBurnSpecial(t *testing.T) {
-	hexKey := "05cddb0663078bcc9f319a855315ac4432e18dde230856d4f76c98fb22fdaf7d"
-
-	sender := getRopstenAccount()
-	sender.GasLimit = 3000000
-	alice, _ := HexToKey(hexKey)
-
-	contractAddr := common.HexToAddress("0x02af4595482023d0bfae2a9f9651f8b931902ddd")
-
-	url := "https://ropsten.infura.io/v3/10d08c76bb104f6286f774ec21fa7ac9"
-
-	client, _ := ethclient.Dial(url)
-
-	pgcContract, _ := contracts.NewPgc(contractAddr, client)
-	userBalance, _ := pgcContract.GetUserBalance(nil, alice.PublicKey.X, alice.PublicKey.Y)
-
-	amount := new(big.Int).SetUint64(2)
-	account := CreateTestAccount("", new(big.Int).SetUint64(2))
-	t.Log(userBalance[4].Uint64())
-	account.nonce = userBalance[4].Uint64()
-	account.balance = arrayToCT(userBalance, alice.Curve)
-	account.sk = alice
-
-	t.Log(account.balance.X.X, account.balance.X.Y, account.balance.Y.X, account.balance.Y.Y)
-
-	t.Log(common.BigToHash(account.sk.X).Hex(), common.BigToHash(account.sk.Y).Hex())
-	key, err := crypto.HexToECDSA(hexKey)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	t.Log(common.BigToHash(key.X).Hex(), common.BigToHash(key.Y).Hex())
-
-	//
-	burnTxOb, err := CreateBurnTx(account, new(big.Int).SetUint64(2))
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	burnTx := burnTxToOb(burnTxOb)
-	hash, _ := HashBurn(sender.From, burnTx)
-	t.Log(common.BytesToHash(hash).Hex())
-	sig, _ := Sign(account.sk, hash)
-
-	tx, err := pgcContract.Burn(sender, sender.From, amount, burnTx.pk, burnTx.proof, burnTx.z, burnTx.nonce, sig.ToInputs())
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	t.Log(tx.Hash().Hex())
 }
 
 // to test on chain.
@@ -148,41 +89,25 @@ func TestDepositBurn(t *testing.T) {
 
 	// burn an account.
 	burnAlice, err := CreateBurnTx(alice, aliceInitBalance)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	require.Nil(t, err, "alice create burntx failed")
 
 	params := Params()
 	g := params.GetG()
 	h := params.GetH()
 	aliceY := new(ECPoint).Sub(alice.balance.Y, new(ECPoint).ScalarMult(g, aliceInitBalance))
 	// check for dle sigma proof.
-	if !verifyDLESigmaProof(aliceY, alice.balance.X, h, new(ECPoint).SetFromPublicKey(&alice.sk.PublicKey), burnAlice.Proof) {
-		t.Error("alice burn proof invalid")
-		return
-	}
+	require.True(t, verifyDLESigmaProof(aliceY, alice.balance.X, h, new(ECPoint).SetFromPublicKey(&alice.sk.PublicKey), burnAlice.Proof), "alice burn proof invalid")
+
 	burnBob, err := CreateBurnTx(bob, bobInitBalance)
 	bobY := new(ECPoint).Sub(bob.balance.Y, new(ECPoint).ScalarMult(g, bobInitBalance))
-	if !verifyDLESigmaProof(bobY, bob.balance.X, h, new(ECPoint).SetFromPublicKey(&bob.sk.PublicKey), burnBob.Proof) {
-		t.Error("bob burn proof invalid")
-		return
-	}
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	require.Nil(t, err, "bob create burntx failed")
+	require.True(t, verifyDLESigmaProof(bobY, bob.balance.X, h, new(ECPoint).SetFromPublicKey(&bob.sk.PublicKey), burnBob.Proof), "bob burn proof invalid")
 
 	test.Burn = make([]*BurnTx, 0)
 	test.Burn = append(test.Burn, burnAlice)
 	test.Burn = append(test.Burn, burnBob)
 
-	data, err := json.Marshal(test)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
+	data, _ := json.Marshal(test)
 	path := "solidity/proofs/depositBurn"
 	WriteToFile(data, path)
 }
@@ -196,51 +121,34 @@ func getAccountByHexKey(hexKey string) *bind.TransactOpts {
 	return bind.NewKeyedTransactor(key)
 }
 
-func getRopstenAccount() *bind.TransactOpts {
-	keyHex := "B38BB7EF4D69CCB1D5A1735887521BC1717AF203AE8BE7F8928E9ECC54FFD5E3"
-
-	key, err := crypto.HexToECDSA(keyHex)
-	if err != nil {
-		panic(err)
-	}
-
-	return bind.NewKeyedTransactor(key)
-}
-
 func TestLocal(t *testing.T) {
-	url := "http://192.168.1.115:8545"
-	rpcClient, _ := Dial(url)
-	client, _ := ethclient.Dial(url)
+	rpcClient := GetLocalRPC()
+	client := GetLocal()
 
 	senderKey, _ := crypto.GenerateKey()
 	sender := bind.NewKeyedTransactor(senderKey)
-	sender.GasLimit = 8000000
-	sender.GasPrice = new(big.Int).SetUint64(100 * 1000 * 1000 * 1000)
-	accounts, _ := rpcClient.GetAccounts()
+	sender.GasLimit = testGasLimit
+	sender.GasPrice = new(big.Int).Mul(new(big.Int).SetUint64(10), GWEI)
+	accounts, err := rpcClient.GetAccounts()
+	require.Nil(t, err)
 
 	amount := new(big.Int).SetUint64(10000)
-	_, err := rpcClient.SendETH(accounts[0], sender.From, amount)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	_, err = rpcClient.SendETH(accounts[0], sender.From, amount)
+	require.Nil(t, err, "send eth failed")
 
 	testPGCFlow(sender, client, t)
 }
 
 func TestRopsten(t *testing.T) {
-	sender := getRopstenAccount()
+	sender := GetRopstenAccount()
 	sender.GasPrice = new(big.Int).SetUint64(10 * 1000 * 1000 * 1000)
-	url := "https://ropsten.infura.io/v3/10d08c76bb104f6286f774ec21fa7ac9"
-
-	client, _ := ethclient.Dial(url)
+	client := GetRopstenInfura()
 	testPGCFlow(sender, client, t)
 }
 
-//
 func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing.T) {
 	var err error
-	sender.GasLimit = 7000000
+	sender.GasLimit = testGasLimit
 	cs := DeployPGCContracts(sender, client)
 
 	// generate alice, bob account.
@@ -250,20 +158,16 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 	sender.Value.Div(sender.Value, precision)
 	alicePK := [2]*big.Int{alice.sk.PublicKey.X, alice.sk.PublicKey.Y}
 	aliceTx, err := cs.PGC.DepositAccount(sender, alicePK)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	require.Nil(t, err, "deposit contract failed")
 	waitFor(aliceTx.Hash(), client)
+
 	// check for alice's encrypted balance.
 	aliceEncryptB, _ := cs.PGC.GetUserBalance(nil, alice.sk.PublicKey.X, alice.sk.PublicKey.Y)
 	aliceDecryptB := Decrypt(alice.sk, arrayToCT(aliceEncryptB, alice.sk.Curve))
-	if aliceInitBalance.Cmp(new(big.Int).SetBytes(aliceDecryptB)) != 0 {
-		t.Error("encrypt on chain not same alice", aliceInitBalance, new(big.Int).SetBytes(aliceDecryptB))
-		return
-	}
+	require.Equal(t, aliceInitBalance.Bytes(), aliceDecryptB, "alice'balance on chain not same with local")
+
 	// keep balance same with chain.
-	alice.balance = arrayToCT(aliceEncryptB, alice.sk.Curve)
+	alice.UpdateBalance(aliceEncryptB)
 
 	// generate bob.
 	bobInitBalance := new(big.Int).SetUint64(500)
@@ -273,48 +177,33 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 	sender.Nonce.Add(sender.Nonce, one)
 	bobPK := [2]*big.Int{bob.sk.PublicKey.X, bob.sk.PublicKey.Y}
 	bobTx, err := cs.PGC.DepositAccount(sender, bobPK)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	require.Nil(t, err, "deposit to bob on chain failed")
 	waitFor(bobTx.Hash(), client)
 	sender.Nonce.Add(sender.Nonce, one)
+
 	// check for bob's encrypted balance.
 	bobEncryptB, _ := cs.PGC.GetUserBalance(nil, bob.sk.PublicKey.X, bob.sk.PublicKey.Y)
 	bobDecryptB := Decrypt(bob.sk, arrayToCT(bobEncryptB, bob.sk.Curve))
-	if bobInitBalance.Cmp(new(big.Int).SetBytes(bobDecryptB)) != 0 {
-		t.Error("encrypt on chain not same bob")
-		return
-	}
+	require.Equal(t, bobInitBalance.Bytes(), bobDecryptB, "bob's balance on chain not same with local")
 	// keep balance same with chain.
-	bob.balance = arrayToCT(bobEncryptB, bob.sk.Curve)
+	bob.UpdateBalance(bobEncryptB)
 
 	transferAmount := new(big.Int).SetUint64(300)
-	ctx, err := CreateCTX(alice, bob, transferAmount)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	ctx, err := CreateCTX(alice, &bob.sk.PublicKey, transferAmount)
+	require.Nil(t, err, "create transfer ctx failed")
 
 	// send transfer tx to contract on chain.
 	tx := ctxToTransferTx(ctx)
-	//
 	transferHash, err := HashTransfer(tx)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	require.Nil(t, err, "hash transfer data failed")
+
 	transferSig, err := Sign(alice.sk, transferHash)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	require.Nil(t, err, "alice sign for transfer tx failed")
+
 	sender.Value = nil
 	transferTxHash, err := cs.PGC.Transfer(sender, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, tx.nonce, transferSig.ToInputs())
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	require.Nil(t, err, "create transfer tx failed")
+
 	sender.Nonce.Add(sender.Nonce, one)
 	waitFor(transferTxHash.Hash(), client)
 	// cost 6444057 gas
@@ -324,64 +213,41 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 	aliceEncBalanceAfter, _ := cs.PGC.GetUserBalance(nil, alicePK[0], alicePK[1])
 	aliceBalanceAfter := Decrypt(alice.sk, arrayToCT(aliceEncBalanceAfter, alice.sk.Curve))
 	aliceExceptBalance := new(big.Int).Sub(aliceInitBalance, transferAmount)
-	if aliceExceptBalance.Cmp(new(big.Int).SetBytes(aliceBalanceAfter)) != 0 {
-		t.Error("alice balance after not right")
-		return
-	}
+	require.Equal(t, aliceExceptBalance.Bytes(), aliceBalanceAfter, "alice balance after transfer is invalid")
 	t.Log("alice'balance after is", new(big.Int).SetBytes(aliceBalanceAfter))
 
 	// check for bob's balance.
 	bobEncryptBalanceAfter, _ := cs.PGC.GetUserBalance(nil, bobPK[0], bobPK[1])
 	bobBalanceAfter := Decrypt(bob.sk, arrayToCT(bobEncryptBalanceAfter, bob.sk.Curve))
 	bobExceptBalance := new(big.Int).Add(bobInitBalance, transferAmount)
-	if bobExceptBalance.Cmp(new(big.Int).SetBytes(bobBalanceAfter)) != 0 {
-		t.Error("bob balance after not right")
-		return
-	}
+	require.Equal(t, bobExceptBalance.Bytes(), bobBalanceAfter, "bob balance after transfer is invalid")
 	t.Log("bob's balance after is ", new(big.Int).SetBytes(bobBalanceAfter))
+	bob.UpdateBalance(bobEncryptBalanceAfter)
 
-	bob.balance = arrayToCT(bobEncryptBalanceAfter, bob.sk.Curve)
 	bob.m = new(big.Int).Set(bobExceptBalance)
 	// create burn tx for bob
 	burnAmount := new(big.Int).SetUint64(50)
 	burnPartTx, err := CreateBurnPartTx(bob, burnAmount)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	require.Nil(t, err)
+
 	receiver := sender.From
 	tmpInfo := txToBurnPartTx(burnPartTx)
 	burnHash, err := HashBurnPart(receiver, tmpInfo)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	require.Nil(t, err)
 	burnSig, err := Sign(bob.sk, burnHash)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	require.Nil(t, err)
 
 	burnTxH, err := cs.PGC.BurnPart(sender, receiver, tmpInfo.amount, tmpInfo.points, tmpInfo.scalar, tmpInfo.rpoints, tmpInfo.l, tmpInfo.r, tmpInfo.nonce, burnSig.ToInputs())
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	require.Nil(t, err, "bob create burn part tx failed")
 	t.Log("burn part tx", burnTxH.Hash().Hex(), "burn amount", burnAmount)
 	waitFor(burnTxH.Hash(), client)
 
 	// check bob's balance.
 	bobFinalEncBalance, _ := cs.PGC.GetUserBalance(nil, bobPK[0], bobPK[1])
 	bobf := Decrypt(bob.sk, arrayToCT(bobFinalEncBalance, bob.sk.Curve))
-	if err != nil {
-		t.Error(err)
-		return
-	}
 	t.Log("bob's final balance", "amount", new(big.Int).SetBytes(bobf))
 	finalExpect := new(big.Int).Sub(new(big.Int).SetBytes(bobBalanceAfter), burnAmount)
-	if finalExpect.Cmp(new(big.Int).SetBytes(bobf)) != 0 {
-		t.Error("bob's balance not correct")
-	}
+	require.Equal(t, finalExpect.Bytes(), bobf, "bob'balance after burn is invalid")
 }
 
 func newBurnTx() *burnTx {
