@@ -43,7 +43,7 @@ func ComputeChallenge(order *big.Int, data ...interface{}) (*big.Int, error) {
 }
 
 // HashTransfer returns the hash of transfer input.
-func HashTransfer(tx *transferTx) ([]byte, error) {
+func HashTransfer(tx *transferTx, token common.Address) ([]byte, error) {
 	parsed, err := abi.JSON(strings.NewReader(contracts.PgcABI))
 	if err != nil {
 		return nil, err
@@ -60,7 +60,7 @@ func HashTransfer(tx *transferTx) ([]byte, error) {
 	}
 	// remove last input which is always sig.
 	arguments := method.Inputs[0 : len(method.Inputs)-1]
-	data, err := arguments.Pack(tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, tx.nonce)
+	data, err := arguments.Pack(tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, new(big.Int).SetBytes(token.Bytes()), tx.nonce)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func HashTransfer(tx *transferTx) ([]byte, error) {
 }
 
 // HashBurn returns the hash of burn input.
-func HashBurn(receiver common.Address, tx *burnTx) ([]byte, error) {
+func HashBurn(receiver, token common.Address, tx *burnTx) ([]byte, error) {
 	parsed, err := abi.JSON(strings.NewReader(contracts.PgcABI))
 	if err != nil {
 		return nil, err
@@ -86,7 +86,7 @@ func HashBurn(receiver common.Address, tx *burnTx) ([]byte, error) {
 	}
 	// remove last input which is always sig.
 	arguments := method.Inputs[0 : len(method.Inputs)-1]
-	data, err := arguments.Pack(new(big.Int).SetBytes(receiver.Bytes()), tx.amount, tx.pk, tx.proof, tx.z, tx.nonce)
+	data, err := arguments.Pack(new(big.Int).SetBytes(receiver.Bytes()), new(big.Int).SetBytes(token.Bytes()), tx.amount, tx.pk, tx.proof, tx.z, tx.nonce)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func HashBurn(receiver common.Address, tx *burnTx) ([]byte, error) {
 }
 
 // HashBurnPart returns hash of burnPart.
-func HashBurnPart(receiver common.Address, tx *burnPartTx) ([]byte, error) {
+func HashBurnPart(receiver, token common.Address, tx *burnPartTx) ([]byte, error) {
 	parsed, err := abi.JSON(strings.NewReader(contracts.PgcABI))
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func HashBurnPart(receiver common.Address, tx *burnPartTx) ([]byte, error) {
 		return nil, fmt.Errorf("no enough inputs for compute hash for '%s", name)
 	}
 	arguments := method.Inputs[0 : len(method.Inputs)-1]
-	data, err := arguments.Pack(new(big.Int).SetBytes(receiver.Bytes()), tx.amount, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, tx.nonce)
+	data, err := arguments.Pack(new(big.Int).SetBytes(receiver.Bytes()), new(big.Int).SetBytes(token.Bytes()), tx.amount, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, tx.nonce)
 	if err != nil {
 		return nil, err
 	}

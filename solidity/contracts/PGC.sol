@@ -6,6 +6,82 @@ import "./PublicParams.sol";
 import "./RangeProofVerifier.sol";
 import "./SigmaVerifier.sol";
 
+/**
+ * @dev Interface of the ERC20 standard as defined in the EIP. Does not include
+ * the optional functions; to access them see `ERC20Detailed`.
+ */
+interface IERC20 {
+    /**
+     * @dev Returns the amount of tokens in existence.
+     */
+    function totalSupply() external view returns (uint256);
+
+    /**
+     * @dev Returns the amount of tokens owned by `account`.
+     */
+    function balanceOf(address account) external view returns (uint256);
+
+    /**
+     * @dev Moves `amount` tokens from the caller's account to `recipient`.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a `Transfer` event.
+     */
+    function transfer(address recipient, uint256 amount) external returns (bool);
+
+    /**
+     * @dev Returns the remaining number of tokens that `spender` will be
+     * allowed to spend on behalf of `owner` through `transferFrom`. This is
+     * zero by default.
+     *
+     * This value changes when `approve` or `transferFrom` are called.
+     */
+    function allowance(address owner, address spender) external view returns (uint256);
+
+    /**
+     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * > Beware that changing an allowance with this method brings the risk
+     * that someone may use both the old and the new allowance by unfortunate
+     * transaction ordering. One possible solution to mitigate this race
+     * condition is to first reduce the spender's allowance to 0 and set the
+     * desired value afterwards:
+     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
+     *
+     * Emits an `Approval` event.
+     */
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    /**
+     * @dev Moves `amount` tokens from `sender` to `recipient` using the
+     * allowance mechanism. `amount` is then deducted from the caller's
+     * allowance.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a `Transfer` event.
+     */
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+
+    /**
+     * @dev Emitted when `value` tokens are moved from one account (`from`) to
+     * another (`to`).
+     *
+     * Note that `value` may be zero.
+     */
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    /**
+     * @dev Emitted when the allowance of a `spender` for an `owner` is set by
+     * a call to `approve`. `value` is the new allowance.
+     */
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
+
 contract PGC {
 
   using BN128 for BN128.G1Point;
@@ -20,6 +96,8 @@ contract PGC {
 
   //
   struct Board {
+    //
+    uint i;
     uint[20] sigmaPoints;
 
     //
@@ -42,8 +120,8 @@ contract PGC {
     uint[2*n] r;
   }
 
-  // pk.x => pk.y => encrypt balance.
-  mapping(uint => mapping(uint => CT)) balance;
+  // pk.x => pk.y => uint(address) => ct encrypt balance.
+  mapping(uint => mapping(uint => mapping(uint => CT))) balance;
 
   // bitSize of balance value.
   uint public constant bitSize = 16;
@@ -100,15 +178,23 @@ contract PGC {
    * @dev deposit eth to an account.
    * randomness is always set to zero. a depositer don't need to know the privatekey of pgc amount.
    */
-  function depositAccount(uint[2] memory publicKey) public payable returns(bool) {
-    // check eth account.
-    require(msg.value >= precision, "eth deposited less than 1 eth");
-    require(msg.value/precision*precision == msg.value, "invalid precision");
+  function depositAccount(uint[2] memory publicKey, address tokenContract, uint amount) public payable returns(bool) {
+    if (uint(tokenContract) == 0) {
+       // check eth account.
+       require(msg.value >= precision, "eth deposited less than 1 eth");
+       require(msg.value/precision*precision == msg.value, "invalid precision");
 
-    // add amount to user account.
-    uint amount = msg.value/precision;
+       // add amount to user account.
+       amount = msg.value/precision;
+    } else {
+      require(amount >= 1, "invalid token amount");
+      require(msg.value == 0, "deposit token don't receive eth");
 
-    CT storage userBalance = balance[publicKey[0]][publicKey[1]];
+      // transfer token to this contract.
+      require(IERC20(tokenContract).transferFrom(msg.sender, address(this), amount), "token transfer failed");
+    }
+
+    CT storage userBalance = balance[publicKey[0]][publicKey[1]][uint(tokenContract)];
     CT memory deposited = encrypt(amount, BN128.G1Point(publicKey[0], publicKey[1]));
     userBalance.X = userBalance.X.add(deposited.X);
     userBalance.Y = userBalance.Y.add(deposited.Y);
@@ -169,23 +255,23 @@ contract PGC {
    * l[2*n-4*n-1]: range proof 2 l.x, l.y.
    * r[2*n-4*n-1]: range proof 2 r.x, r.y.
    */
-  function transfer(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint nonce, uint[2] memory sig) public returns(bool) {
+  function transfer(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint token, uint nonce, uint[2] memory sig) public returns(bool) {
     // check for sig and nonce.
-    require(verifyTransferSig(points, scalar, rpoints, l, r, nonce, sig), "verify sig failed for transfertx");
-    CT storage userBalance = balance[points[0]][points[1]];
+    require(verifyTransferSig(points, scalar, rpoints, l, r, token, nonce, sig), "verify sig failed for transfertx");
+    CT storage userBalance = balance[points[0]][points[1]][token];
     require(nonce == userBalance.nonce, "invalid nonce");
     Board memory b;
     // check v in ct1 == c in ct2.
-    for (uint i = 0; i < 20; i++) {
-      b.sigmaPoints[i] = points[i];
+    for (b.i = 0; b.i < 20; b.i++) {
+      b.sigmaPoints[b.i] = points[b.i];
     }
     require(sigmaVerifier.verifySigmaProof(b.sigmaPoints, scalar[0], scalar[1], scalar[2]), "sigma verify failed");
 
     // check balance updated is same with refreshed balance.
     b.ct1.X = BN128.G1Point(points[2], points[3]);
     b.ct1.Y = BN128.G1Point(points[4], points[5]);
-    for (uint i = 0; i < 4; i++) {
-      b.ct1Points[i] = points[2+i];
+    for (b.i = 0; b.i < 4; b.i++) {
+      b.ct1Points[b.i] = points[2+b.i];
     }
     // get tmp balance = alice'balnce - transfer'balance
     b.tmpUpdatedBalance.X = userBalance.X.add(b.ct1.X.neg());
@@ -195,36 +281,36 @@ contract PGC {
     b.dleSigmaPoints[0] = BN128.G1Point(points[24], points[25]);
     b.dleSigmaPoints[1] = BN128.G1Point(points[26], points[27]);
     // only this failed.
-    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, BN128.G1Point(points[0], points[1]), scalar[3]), "dle sigma proof failed");
+    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[3]), "dle sigma proof failed");
 
     // check range proof 1.
-    for (uint i = 0; i < 8; i++) {
-      b.rpoints[i] = rpoints[i];
+    for (b.i = 0; b.i < 8; b.i++) {
+      b.rpoints[b.i] = rpoints[b.i];
     }
     // set ct1.Y (commitment).
     b.rpoints[8] = points[4];
     b.rpoints[9] = points[5];
-    for (uint i = 0; i < 2*n; i++) {
-      b.l[i] = l[i];
-      b.r[i] = r[i];
+    for (b.i = 0; b.i < 2*n; b.i++) {
+      b.l[b.i] = l[b.i];
+      b.r[b.i] = r[b.i];
     }
-    for (uint i = 0; i < 5; i++) {
-      b.rscalar[i] = scalar[4+i];
+    for (b.i = 0; b.i < 5; b.i++) {
+      b.rscalar[b.i] = scalar[4+b.i];
     }
     require(rangeProofVerifier.verifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 1 failed");
 
     // check range proof 2.
-    for (uint i = 0; i < 8; i++) {
-      b.rpoints[i] = rpoints[8+i];
+    for (b.i = 0; b.i < 8; b.i++) {
+      b.rpoints[b.i] = rpoints[8+b.i];
     }
     b.rpoints[8] = points[22];
     b.rpoints[9] = points[23];
-    for (uint i = 0; i < 2*n; i++) {
-      b.l[i] = l[i+2*n];
-      b.r[i] = r[i+2*n];
+    for (b.i = 0; b.i < 2*n; b.i++) {
+      b.l[b.i] = l[b.i+2*n];
+      b.r[b.i] = r[b.i+2*n];
     }
-    for (uint i = 0; i < 5; i++) {
-      b.rscalar[i] = scalar[9+i];
+    for (b.i = 0; b.i < 5; b.i++) {
+      b.rscalar[b.i] = scalar[9+b.i];
     }
     require(rangeProofVerifier.verifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 2 verify failed");
 
@@ -235,22 +321,22 @@ contract PGC {
     userBalance.nonce = nonce + 1;
 
     // update receiver's balance.
-    CT storage receiverBalance = balance[points[6]][points [7]];
+    CT storage receiverBalance = balance[points[6]][points [7]][token];
     b.ct2.X = BN128.G1Point(points[8], points[9]);
     b.ct2.Y = BN128.G1Point(points[10], points[11]);
-    for (uint i = 0; i < 4; i++) {
-      b.ct2Points[i] = points[8+i];
+    for (b.i = 0; b.i < 4; b.i++) {
+      b.ct2Points[b.i] = points[8+b.i];
     }
     receiverBalance.X = receiverBalance.X.add(b.ct2.X);
     receiverBalance.Y = receiverBalance.Y.add(b.ct2.Y);
 
-    emit LogTransfer(msg.sender, points[0], points[1], points[6], points[7], b.ct1.X.X, b.ct1.X.Y, b.ct1.Y.X, b.ct1.Y.Y, b.ct2.X.X, b.ct2.X.Y, b.ct2.Y.X, b.ct2.Y.Y, now);
+    // emit LogTransfer(msg.sender, points[0], points[1], points[6], points[7], b.ct1.X.X, b.ct1.X.Y, b.ct1.Y.X, b.ct1.Y.Y, b.ct2.X.X, b.ct2.X.Y, b.ct2.Y.X, b.ct2.Y.Y, now);
 
     return true;
   }
 
-  function getUserBalance(uint x, uint y) public view returns (uint[5] memory ct) {
-    CT memory userBalance = balance[x][y];
+  function getUserBalance(uint x, uint y, address token) public view returns (uint[5] memory ct) {
+    CT memory userBalance = balance[x][y][uint(token)];
     ct[0] = userBalance.X.X;
     ct[1] = userBalance.X.Y;
     ct[2] = userBalance.Y.X;
@@ -259,7 +345,7 @@ contract PGC {
     return ct;
   }
 
-  function verifyDLESigmaProof(CT memory ori, CT memory refresh, BN128.G1Point[2] memory p, BN128.G1Point memory pk, uint z) internal view returns(bool) {
+  function verifyDLESigmaProof(CT memory ori, CT memory refresh, BN128.G1Point[2] memory p, uint pkx, uint pky, uint z) internal view returns(bool) {
     BN128.G1Point memory g1 = refresh.Y.add(ori.Y.neg());
     BN128.G1Point memory h1 = refresh.X.add(ori.X.neg());
     uint[12] memory points;
@@ -273,8 +359,8 @@ contract PGC {
     points[7] = h1.Y;
     points[8] = h.X;
     points[9] = h.Y;
-    points[10] = pk.X;
-    points[11] = pk.Y;
+    points[10] = pkx;
+    points[11] = pky;
     return dleSigmaVerifier.verifyDLESigmaProof(points, z);
   }
 
@@ -326,12 +412,12 @@ contract PGC {
    * l[2*n-4*n-1]: range proof 2 l.x, l.y.
    * r[2*n-4*n-1]: range proof 2 r.x, r.y.
    */
-  function burnPart(address payable receiver, uint amount, uint[18] memory points, uint[12] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint nonce, uint[2] memory sig) public returns(bool) {
+  function burnPart(address payable receiver, uint token, uint amount, uint[18] memory points, uint[12] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint nonce, uint[2] memory sig) public returns(bool) {
     require(amount >= 1, "invalid amount");
     // check sig.
-    require(verifyBurnPartSig(uint(receiver), amount, points, scalar, rpoints, l, r, nonce, sig), "verify sig failed for burn part");
+    require(verifyBurnPartSig(uint(receiver), token, amount, points, scalar, rpoints, l, r, nonce, sig), "verify sig failed for burn part");
 
-    CT storage userBalance = balance[points[0]][points[1]];
+    CT storage userBalance = balance[points[0]][points[1]][token];
     require(nonce == userBalance.nonce, "invalid nonce");
     Board memory b;
 
@@ -354,7 +440,7 @@ contract PGC {
     b.refreshBalance.Y = BN128.G1Point(points[8], points[9]);
     b.dleSigmaPoints[0] = BN128.G1Point(points[14], points[15]);
     b.dleSigmaPoints[1] = BN128.G1Point(points[16], points[17]);
-    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, BN128.G1Point(points[0], points[1]), scalar[1]), "dle sigma proof 2 failed");
+    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[1]), "dle sigma proof 2 failed");
 
     // check range proof 1.
     for (uint i = 0; i < 8; i++) {
@@ -393,8 +479,13 @@ contract PGC {
     // update sender's nonce.
     userBalance.nonce = nonce + 1;
 
-    // transfer eth.
-    receiver.transfer(amount * precision);
+    if (token == 0) {
+      // transfer eth.
+      receiver.transfer(amount * precision);
+    } else {
+      // transfer token back to user.
+      require(IERC20(address(token)).transfer(receiver, amount), "transfer token back to user failed");
+    }
 
     // emit event.
     emit LogBurnPart(msg.sender, receiver, points[0], points[1], amount, now);
@@ -407,13 +498,13 @@ contract PGC {
    * proof[2-3]: A2 point.
    *
    */
-  function burn(address payable receiver, uint amount, uint[2] memory publicKey, uint[4] memory proof, uint z, uint nonce, uint[2] memory sig) public returns(bool) {
+  function burn(address payable receiver, uint token, uint amount, uint[2] memory publicKey, uint[4] memory proof, uint z, uint nonce, uint[2] memory sig) public returns(bool) {
     // check for sig.
-    require(verifyBurnSig(uint(receiver), amount, publicKey, proof, z, nonce, sig), "invalid sig for burntx");
+    require(verifyBurnSig(uint(receiver), token, amount, publicKey, proof, z, nonce, sig), "invalid sig for burntx");
     // do nothing
     require(amount >= 1, "invalid amount");
     // compute y' = Y - g*m.
-    CT storage userBalance = balance[publicKey[0]][publicKey[1]];
+    CT storage userBalance = balance[publicKey[0]][publicKey[1]][token];
     require(nonce == userBalance.nonce, "invalid nonce");
     // todo: check not zero.
 
@@ -432,8 +523,12 @@ contract PGC {
     // update user nonce.
     userBalance.nonce = nonce + 1;
 
-    // transfer eth back to user.
-    receiver.transfer(amount*precision);
+    if (token == 0) {
+      // transfer eth back to user.
+      receiver.transfer(amount*precision);
+    } else {
+      require(IERC20(address(token)).transfer(receiver, amount), "transfer token back to user failed");
+    }
 
     emit LogBurn(msg.sender, receiver, publicKey[0], publicKey[1], amount, now);
   }
@@ -483,16 +578,16 @@ contract PGC {
   /*
    *
    */
-  function verifyTransferSig(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint nonce, uint[2] memory sig) internal view returns(bool) {
-    uint hash = uint(keccak256(abi.encodePacked(points, scalar, rpoints, l, r, nonce))).mod();
+  function verifyTransferSig(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint token, uint nonce, uint[2] memory sig) internal view returns(bool) {
+    uint hash = uint(keccak256(abi.encodePacked(points, scalar, rpoints, l, r, token, nonce))).mod();
     return verifySig(hash, points[0], points[1], sig[0], sig[1]);
   }
 
   /*
    *
    */
-  function verifyBurnPartSig(uint receiver, uint amount, uint[18] memory points, uint[12] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint nonce, uint[2] memory sig) public view returns(bool) {
-    uint hash = uint(keccak256(abi.encodePacked(receiver, amount, points, scalar, rpoints, l, r, nonce))).mod();
+  function verifyBurnPartSig(uint receiver, uint token, uint amount, uint[18] memory points, uint[12] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint nonce, uint[2] memory sig) public view returns(bool) {
+    uint hash = uint(keccak256(abi.encodePacked(receiver, token, amount, points, scalar, rpoints, l, r, nonce))).mod();
 
     return verifySig(hash, points[0], points[1], sig[0], sig[1]);
   }
@@ -500,8 +595,8 @@ contract PGC {
   /**
    *
    */
-  function verifyBurnSig(uint receiver, uint amount, uint[2] memory publicKey, uint[4] memory proof, uint z, uint nonce, uint[2] memory sig) public view returns(bool) {
-    uint hash = uint(keccak256(abi.encodePacked(receiver, amount, publicKey, proof, z, nonce))).mod();
+  function verifyBurnSig(uint receiver, uint token, uint amount, uint[2] memory publicKey, uint[4] memory proof, uint z, uint nonce, uint[2] memory sig) public view returns(bool) {
+    uint hash = uint(keccak256(abi.encodePacked(receiver, token, amount, publicKey, proof, z, nonce))).mod();
     return verifySig(hash, publicKey[0], publicKey[1], sig[0], sig[1]);
   }
 

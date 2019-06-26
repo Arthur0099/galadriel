@@ -17,6 +17,7 @@ type Contracts struct {
 	DLESigmaVerifier *contracts.Dlesigmaverifier
 	IPVerifier       *contracts.Ipverifier
 	PGC              *contracts.Pgc
+	PGCAddress       common.Address
 	PublicParams     *contracts.Publicparams
 	RangeVerifier    *contracts.Rangeproofverifier
 	SigmaVerifier    *contracts.Sigmaverifier
@@ -46,6 +47,29 @@ func NewPGCContracts(dle, ip, pgcc, pp, rv, sv common.Address, client *ethclient
 	c.SigmaVerifier, _ = contracts.NewSigmaverifier(sv, client)
 
 	return &c
+}
+
+// DeployToken deploys a erc20 token contract for test.
+func DeployToken(auth *bind.TransactOpts, client *ethclient.Client) (*contracts.Token, common.Address) {
+	// get current nonce.
+	if auth.Nonce == nil {
+		nonce, err := client.NonceAt(context.Background(), auth.From, nil)
+		if err != nil {
+			panic(err)
+		}
+
+		auth.Nonce = new(big.Int).SetUint64(nonce)
+	}
+
+	tokenAddr, tokenTx, token, err := contracts.DeployToken(auth, client)
+	if err != nil {
+		panic(err)
+	}
+	log.Debug("deploy token contracts", "address", tokenAddr.Hex(), "tx", tokenTx.Hash().Hex())
+	auth.Nonce.Add(auth.Nonce, one)
+	waitFor(tokenTx.Hash(), client)
+
+	return token, tokenAddr
 }
 
 // DeployPGCContracts deploys all contract of pgc system.
@@ -120,6 +144,7 @@ func DeployPGCContracts(auth *bind.TransactOpts, client *ethclient.Client) *Cont
 	log.Debug("deploy pgc", "address", pgcAddress, "tx", pgcTx.Hash().Hex())
 	auth.Nonce.Add(auth.Nonce, one)
 	c.PGC = pgcC
+	c.PGCAddress = pgcAddress
 	waitFor(pgcTx.Hash(), client)
 
 	return &c
