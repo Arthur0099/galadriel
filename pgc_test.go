@@ -150,11 +150,11 @@ func TestRopsten(t *testing.T) {
 	sender := GetRopstenAccount()
 	sender.GasPrice = new(big.Int).SetUint64(10 * 1000 * 1000 * 1000)
 	client := GetRopstenInfura()
-	//testPGCFlow(sender, client, t, nil, common.Address{})
+	testPGCFlow(sender, client, t, nil, common.Address{})
 
 	// test for token.
-	tokenContract, tokenAddr := DeployToken(sender, client)
-	testPGCFlow(sender, client, t, tokenContract, tokenAddr)
+	//tokenContract, tokenAddr := DeployToken(sender, client)
+	//testPGCFlow(sender, client, t, tokenContract, tokenAddr)
 }
 
 func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing.T, tokenContract *contracts.Token, token common.Address) {
@@ -170,6 +170,15 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 		approveTx, err := tokenContract.Approve(sender, cs.PGCAddress, approveAmount)
 		require.Nil(t, err, "approve for token failed")
 		waitFor(approveTx.Hash(), client)
+		sender.Nonce.Add(sender.Nonce, one)
+
+		// add token contract to tokenconvert.
+		addTokenTx, err := cs.TokenConverter.AddToken(sender, token, one, "")
+		if err != nil {
+			panic(err)
+		}
+		t.Log("add token to tokenconverter", "tx", addTokenTx.Hash().Hex())
+		waitFor(addTokenTx.Hash(), client)
 		sender.Nonce.Add(sender.Nonce, one)
 	}
 
@@ -229,7 +238,6 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 	require.Nil(t, err, "alice sign for transfer tx failed")
 
 	sender.Value = nil
-	t.Log(new(big.Int).SetBytes(token.Bytes()).Uint64())
 	transferTxHash, err := cs.PGC.Transfer(sender, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, new(big.Int).SetBytes(token.Bytes()), tx.nonce, transferSig.ToInputs())
 	require.Nil(t, err, "create transfer tx failed")
 

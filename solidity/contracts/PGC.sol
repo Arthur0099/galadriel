@@ -5,6 +5,7 @@ import "./DLESigmaVerifier.sol";
 import "./PublicParams.sol";
 import "./RangeProofVerifier.sol";
 import "./SigmaVerifier.sol";
+import "./TokenConverter.sol";
 
 /**
  * @dev Interface of the ERC20 standard as defined in the EIP. Does not include
@@ -96,11 +97,9 @@ contract PGC {
 
   //
   struct Board {
-    //
+    // for tmp calculation.
     uint i;
     uint[20] sigmaPoints;
-
-    //
     CT ct1;
     CT ct2;
     uint[4] ct1Points;
@@ -109,15 +108,21 @@ contract PGC {
     CT refreshBalance;
     BN128.G1Point[2] dleSigmaPoints;
     uint[12] dleTmpPoints;
+    address token;
+    uint tokenAmount;
+    uint pgcAmount;
 
-    //
+    // to call verify contract.
     uint[4] proof;
-
-    //
     uint[10] rpoints;
     uint[5] rscalar;
     uint[2*n] l;
     uint[2*n] r;
+
+    // for log event.
+    uint[4] fromto;
+    uint[4] logCt1;
+    uint[4] logCt2;
   }
 
   // pk.x => pk.y => uint(address) => ct encrypt balance.
@@ -126,6 +131,7 @@ contract PGC {
   // bitSize of balance value.
   uint public constant bitSize = 16;
   uint public constant n = 4;
+  uint public constant maxNumber = 2**bitSize;
 
   // decimal.
   uint public constant decimal = 2;
@@ -151,18 +157,22 @@ contract PGC {
   // params.
   PublicParams public params;
 
+  // token converter.
+  TokenConverter public tokenConverter;
+
   // events
-  event LogDepositAccount(address indexed proxy, uint tox, uint toy, uint amount, uint time);
-  event LogTransfer(address indexed proxy, uint fromx, uint fromy, uint tox, uint toy, uint amountSenderXX, uint amountSenderXY, uint amountSenderYX, uint amountSenderYY, uint amountFromXX, uint amountFromXY, uint amountFromYX, uint amountFromYY, uint time);
-  event LogBurn(address indexed proxy, address indexed receiver, uint accountx, uint accounty, uint amount, uint time);
-  event LogBurnPart(address indexed proxy, address indexed receiver, uint accountx, uint accounty, uint amount, uint time);
+  event LogDepositAccount(address indexed proxy, address indexed token, uint tox, uint toy, uint amount, uint time);
+  event LogTransfer(address indexed proxy, address indexed token, uint[4] fromto, uint[4] ct1, uint[4] ct2, uint time);
+  event LogBurn(address indexed proxy, address indexed receiver, address indexed token, uint accountx, uint accounty, uint amount, uint time);
+  event LogBurnPart(address indexed proxy, address indexed receiver, address indexed token, uint accountx, uint accounty, uint amount, uint time);
 
   //
-  constructor(address params_, address dleSigmaVerifier_, address rangeProofVerifier_, address sigmaVerifier_) public {
+  constructor(address params_, address dleSigmaVerifier_, address rangeProofVerifier_, address sigmaVerifier_, address tokenConverter_) public {
     params = PublicParams(params_);
     dleSigmaVerifier = DLESigmaVerifier(dleSigmaVerifier_);
     rangeProofVerifier = RangeProofVerifier(rangeProofVerifier_);
     sigmaVerifier = SigmaVerifier(sigmaVerifier_);
+    tokenConverter = TokenConverter(tokenConverter_);
 
     uint[2] memory tmpH = params.getH();
     uint[2] memory tmpG = params.getG();
@@ -178,28 +188,26 @@ contract PGC {
    * @dev deposit eth to an account.
    * randomness is always set to zero. a depositer don't need to know the privatekey of pgc amount.
    */
-  function depositAccount(uint[2] memory publicKey, address tokenContract, uint amount) public payable returns(bool) {
-    if (uint(tokenContract) == 0) {
-       // check eth account.
-       require(msg.value >= precision, "eth deposited less than 1 eth");
-       require(msg.value/precision*precision == msg.value, "invalid precision");
-
-       // add amount to user account.
-       amount = msg.value/precision;
+  function depositAccount(uint[2] memory publicKey, address tokenAddr, uint tokenAmount) public payable returns(bool) {
+    uint pgcAmount;
+    if (uint(tokenAddr) == 0) {
+       // use msg.value to calculate amount instead.
+      pgcAmount = tokenConverter.convertToPGC(tokenAddr, msg.value);
     } else {
-      require(amount >= 1, "invalid token amount");
       require(msg.value == 0, "deposit token don't receive eth");
 
       // transfer token to this contract.
-      require(IERC20(tokenContract).transferFrom(msg.sender, address(this), amount), "token transfer failed");
+      require(IERC20(tokenAddr).transferFrom(msg.sender, address(this), tokenAmount), "token transfer failed");
+      pgcAmount = tokenConverter.convertToPGC(tokenAddr, tokenAmount);
     }
 
-    CT storage userBalance = balance[publicKey[0]][publicKey[1]][uint(tokenContract)];
-    CT memory deposited = encrypt(amount, BN128.G1Point(publicKey[0], publicKey[1]));
+    // encrypt amount and store on chain.
+    CT storage userBalance = balance[publicKey[0]][publicKey[1]][uint(tokenAddr)];
+    CT memory deposited = encrypt(pgcAmount, BN128.G1Point(publicKey[0], publicKey[1]));
     userBalance.X = userBalance.X.add(deposited.X);
     userBalance.Y = userBalance.Y.add(deposited.Y);
 
-    emit LogDepositAccount(msg.sender, publicKey[0], publicKey[1], amount, now);
+    emit LogDepositAccount(msg.sender, tokenAddr, publicKey[0], publicKey[1], pgcAmount, now);
 
     return true;
   }
@@ -330,7 +338,21 @@ contract PGC {
     receiverBalance.X = receiverBalance.X.add(b.ct2.X);
     receiverBalance.Y = receiverBalance.Y.add(b.ct2.Y);
 
-    // emit LogTransfer(msg.sender, points[0], points[1], points[6], points[7], b.ct1.X.X, b.ct1.X.Y, b.ct1.Y.X, b.ct1.Y.Y, b.ct2.X.X, b.ct2.X.Y, b.ct2.Y.X, b.ct2.Y.Y, now);
+    // set for event.
+    b.fromto[0] = points[0];
+    b.fromto[1] = points[1];
+    b.fromto[2] = points[6];
+    b.fromto[3] = points[7];
+    b.logCt1[0] = b.ct1.X.X;
+    b.logCt1[1] = b.ct1.X.Y;
+    b.logCt1[2] = b.ct1.Y.X;
+    b.logCt1[3] = b.ct1.Y.Y;
+    b.logCt2[0] = b.ct2.X.X;
+    b.logCt2[1] = b.ct2.X.Y;
+    b.logCt2[2] = b.ct2.Y.X;
+    b.logCt2[3] = b.ct2.Y.Y;
+
+    emit LogTransfer(msg.sender, address(token), b.fromto, b.logCt1, b.logCt2, now);
 
     return true;
   }
@@ -443,33 +465,33 @@ contract PGC {
     require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[1]), "dle sigma proof 2 failed");
 
     // check range proof 1.
-    for (uint i = 0; i < 8; i++) {
-      b.rpoints[i] = rpoints[i];
+    for (b.i = 0; b.i < 8; b.i++) {
+      b.rpoints[b.i] = rpoints[b.i];
     }
     // set ct.y
     b.rpoints[8] = points[4];
     b.rpoints[9] = points[5];
-    for (uint i = 0; i < 2*n; i++) {
-      b.l[i] = l[i];
-      b.r[i] = r[i];
+    for (b.i = 0; b.i < 2*n; b.i++ ) {
+      b.l[b.i] = l[b.i];
+      b.r[b.i] = r[b.i];
     }
-    for (uint i = 0; i < 5; i++) {
-      b.rscalar[i] = scalar[i+2];
+    for (b.i = 0; b.i < 5; b.i++ ) {
+      b.rscalar[b.i] = scalar[b.i+2];
     }
     require(rangeProofVerifier.verifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 1 failed");
 
     // check range proof 2.
-    for (uint i = 0; i < 8; i++) {
-      b.rpoints[i] = rpoints[8+i];
+    for (b.i = 0; b.i < 8; b.i++ ) {
+      b.rpoints[b.i] = rpoints[8+b.i];
     }
     b.rpoints[8] = points[8];
     b.rpoints[9] = points[9];
-    for (uint i = 0; i < 2*n; i++) {
-      b.l[i] = l[i+2*n];
-      b.r[i] = r[i+2*n];
+    for (b.i = 0; b.i < 2*n; b.i++ ) {
+      b.l[b.i] = l[b.i+2*n];
+      b.r[b.i] = r[b.i+2*n];
     }
-    for (uint i = 0; i < 5; i++) {
-      b.rscalar[i] = scalar[7+i];
+    for (b.i = 0; b.i < 5; b.i++ ) {
+      b.rscalar[b.i] = scalar[7+b.i];
     }
     require(rangeProofVerifier.verifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 2 verify failed");
 
@@ -479,16 +501,20 @@ contract PGC {
     // update sender's nonce.
     userBalance.nonce = nonce + 1;
 
+    b.token = address(token);
+    b.pgcAmount = amount;
+
     if (token == 0) {
       // transfer eth.
-      receiver.transfer(amount * precision);
+      receiver.transfer(tokenConverter.convertToToken(address(0), amount));
     } else {
       // transfer token back to user.
-      require(IERC20(address(token)).transfer(receiver, amount), "transfer token back to user failed");
+      b.tokenAmount = tokenConverter.convertToToken(b.token, amount);
+      require(IERC20(b.token).transfer(receiver, b.tokenAmount), "transfer token back to user failed");
     }
 
     // emit event.
-    emit LogBurnPart(msg.sender, receiver, points[0], points[1], amount, now);
+    emit LogBurnPart(msg.sender, receiver, b.token, points[0], points[1], b.pgcAmount, now);
   }
 
 
@@ -525,12 +551,12 @@ contract PGC {
 
     if (token == 0) {
       // transfer eth back to user.
-      receiver.transfer(amount*precision);
+      receiver.transfer(tokenConverter.convertToToken(address(token), amount));
     } else {
-      require(IERC20(address(token)).transfer(receiver, amount), "transfer token back to user failed");
+      require(IERC20(address(token)).transfer(receiver, tokenConverter.convertToToken(address(token), amount)), "transfer token back to user failed");
     }
 
-    emit LogBurn(msg.sender, receiver, publicKey[0], publicKey[1], amount, now);
+    emit LogBurn(msg.sender, receiver, address(token), publicKey[0], publicKey[1], amount, now);
   }
 
   /*

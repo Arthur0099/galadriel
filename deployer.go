@@ -21,6 +21,7 @@ type Contracts struct {
 	PublicParams     *contracts.Publicparams
 	RangeVerifier    *contracts.Rangeproofverifier
 	SigmaVerifier    *contracts.Sigmaverifier
+	TokenConverter   *contracts.Tokenconverter
 }
 
 func waitFor(tx common.Hash, client *ethclient.Client) {
@@ -136,8 +137,18 @@ func DeployPGCContracts(auth *bind.TransactOpts, client *ethclient.Client) *Cont
 	c.RangeVerifier = rangeVerifier
 	waitFor(rangeTx.Hash(), client)
 
+	// deploy token convert contract.
+	tokenConvertAddress, tokenConvertTx, tokenConverter, err := contracts.DeployTokenconverter(auth, client)
+	if err != nil {
+		panic(err)
+	}
+	log.Debug("deploy token converter", "address", tokenConvertAddress, "tx", tokenConvertTx.Hash())
+	c.TokenConverter = tokenConverter
+	auth.Nonce.Add(auth.Nonce, one)
+	waitFor(tokenConvertTx.Hash(), client)
+
 	// deploy pgc contract
-	pgcAddress, pgcTx, pgcC, err := contracts.DeployPgc(auth, client, ppAddress, dleSigmaAddress, rangeAddress, sigmaAddress)
+	pgcAddress, pgcTx, pgcC, err := contracts.DeployPgc(auth, client, ppAddress, dleSigmaAddress, rangeAddress, sigmaAddress, tokenConvertAddress)
 	if err != nil {
 		panic(err)
 	}
