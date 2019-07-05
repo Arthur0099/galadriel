@@ -14,6 +14,11 @@ var (
 	precision = new(big.Int).Exp(base, decimal, nil)
 )
 
+type CT struct {
+	Ct    [4]*big.Int
+	Nonce *big.Int
+}
+
 // CTX represents a encrypted tx on chain.
 type CTX struct {
 	nonce uint64

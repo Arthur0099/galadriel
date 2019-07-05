@@ -150,12 +150,14 @@ func TestRopsten(t *testing.T) {
 	sender := GetRopstenAccount()
 	sender.GasPrice = new(big.Int).SetUint64(10 * 1000 * 1000 * 1000)
 	client := GetRopstenInfura()
-	testPGCFlow(sender, client, t, nil, common.Address{})
+	//testPGCFlow(sender, client, t, nil, common.Address{})
 
 	// test for token.
-	//tokenContract, tokenAddr := DeployToken(sender, client)
-	//testPGCFlow(sender, client, t, tokenContract, tokenAddr)
+	tokenContract, tokenAddr := DeployToken(sender, client)
+	testPGCFlow(sender, client, t, tokenContract, tokenAddr)
 }
+
+// 0x10154bad
 
 func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing.T, tokenContract *contracts.Token, token common.Address) {
 	var err error
@@ -333,10 +335,10 @@ func newBurnPartTx() *burnPartTx {
 	return &tx
 }
 
-func arrayToCT(p [5]*big.Int, curve elliptic.Curve) *CTEncPoint {
+func arrayToCT(p CT, curve elliptic.Curve) *CTEncPoint {
 	c := CTEncPoint{}
-	c.X = NewECPoint(p[0], p[1], curve)
-	c.Y = NewECPoint(p[2], p[3], curve)
+	c.X = NewECPoint(p.Ct[0], p.Ct[1], curve)
+	c.Y = NewECPoint(p.Ct[2], p.Ct[3], curve)
 
 	return &c
 }

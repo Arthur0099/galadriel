@@ -147,8 +147,17 @@ func DeployPGCContracts(auth *bind.TransactOpts, client *ethclient.Client) *Cont
 	auth.Nonce.Add(auth.Nonce, one)
 	waitFor(tokenConvertTx.Hash(), client)
 
+	// deploy pgc verifyer.
+	pgcVerifierAddr, pgcVerifierTx, _, err := contracts.DeployPgcverifier(auth, client, ppAddress, dleSigmaAddress, rangeAddress, sigmaAddress)
+	if err != nil {
+		panic(err)
+	}
+	log.Debug("deploy pgcverifier", "address", pgcVerifierAddr, "tx", pgcVerifierTx.Hash())
+	auth.Nonce.Add(auth.Nonce, one)
+	waitFor(pgcVerifierTx.Hash(), client)
+
 	// deploy pgc contract
-	pgcAddress, pgcTx, pgcC, err := contracts.DeployPgc(auth, client, ppAddress, dleSigmaAddress, rangeAddress, sigmaAddress, tokenConvertAddress)
+	pgcAddress, pgcTx, pgcC, err := contracts.DeployPgc(auth, client, ppAddress, pgcVerifierAddr, tokenConvertAddress)
 	if err != nil {
 		panic(err)
 	}

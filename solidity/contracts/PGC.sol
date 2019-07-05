@@ -1,27 +1,15 @@
 pragma solidity >= 0.5.0 < 0.6.0;
 
 import "./library/BN128.sol";
-import "./DLESigmaVerifier.sol";
 import "./PublicParams.sol";
-import "./RangeProofVerifier.sol";
-import "./SigmaVerifier.sol";
 import "./TokenConverter.sol";
+import "./PGCVerifier.sol";
 
 /**
  * @dev Interface of the ERC20 standard as defined in the EIP. Does not include
  * the optional functions; to access them see `ERC20Detailed`.
  */
 interface IERC20 {
-    /**
-     * @dev Returns the amount of tokens in existence.
-     */
-    function totalSupply() external view returns (uint256);
-
-    /**
-     * @dev Returns the amount of tokens owned by `account`.
-     */
-    function balanceOf(address account) external view returns (uint256);
-
     /**
      * @dev Moves `amount` tokens from the caller's account to `recipient`.
      *
@@ -30,31 +18,6 @@ interface IERC20 {
      * Emits a `Transfer` event.
      */
     function transfer(address recipient, uint256 amount) external returns (bool);
-
-    /**
-     * @dev Returns the remaining number of tokens that `spender` will be
-     * allowed to spend on behalf of `owner` through `transferFrom`. This is
-     * zero by default.
-     *
-     * This value changes when `approve` or `transferFrom` are called.
-     */
-    function allowance(address owner, address spender) external view returns (uint256);
-
-    /**
-     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.
-     *
-     * Returns a boolean value indicating whether the operation succeeded.
-     *
-     * > Beware that changing an allowance with this method brings the risk
-     * that someone may use both the old and the new allowance by unfortunate
-     * transaction ordering. One possible solution to mitigate this race
-     * condition is to first reduce the spender's allowance to 0 and set the
-     * desired value afterwards:
-     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
-     *
-     * Emits an `Approval` event.
-     */
-    function approve(address spender, uint256 amount) external returns (bool);
 
     /**
      * @dev Moves `amount` tokens from `sender` to `recipient` using the
@@ -66,20 +29,6 @@ interface IERC20 {
      * Emits a `Transfer` event.
      */
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-
-    /**
-     * @dev Emitted when `value` tokens are moved from one account (`from`) to
-     * another (`to`).
-     *
-     * Note that `value` may be zero.
-     */
-    event Transfer(address indexed from, address indexed to, uint256 value);
-
-    /**
-     * @dev Emitted when the allowance of a `spender` for an `owner` is set by
-     * a call to `approve`. `value` is the new allowance.
-     */
-    event Approval(address indexed owner, address indexed spender, uint256 value);
 }
 
 
@@ -98,26 +47,17 @@ contract PGC {
   //
   struct Board {
     // for tmp calculation.
-    uint i;
-    uint[20] sigmaPoints;
     CT ct1;
     CT ct2;
-    uint[4] ct1Points;
-    uint[4] ct2Points;
+
     CT tmpUpdatedBalance;
-    CT refreshBalance;
-    BN128.G1Point[2] dleSigmaPoints;
-    uint[12] dleTmpPoints;
     address token;
     uint tokenAmount;
     uint pgcAmount;
 
-    // to call verify contract.
-    uint[4] proof;
-    uint[10] rpoints;
-    uint[5] rscalar;
-    uint[2*n] l;
-    uint[2*n] r;
+    //
+    uint[4] userBalance;
+    uint localNonce;
 
     // for log event.
     uint[4] fromto;
@@ -125,19 +65,38 @@ contract PGC {
     uint[4] logCt2;
   }
 
-  // pk.x => pk.y => uint(address) => ct encrypt balance.
-  mapping(uint => mapping(uint => mapping(uint => CT))) balance;
+  // pk.x => pk.y => uint(address) => ct encrypt current balance.
+  mapping(uint => mapping(uint => mapping(uint => CT))) currentBalance;
+  // pk.x => pk.y => uint(address) => ct encrypt last balance.
+  // balnce not roll over into current balance but can be spent.
+  // nonce not set in this ct.
+  mapping(uint => mapping(uint => mapping(uint => CT))) lastBalance;
+
+  // pk.x => pk.y => uint(address) => ct encrypt pending balance.
+  // balance in current epoch and can't be spent.
+  mapping(uint => mapping(uint => mapping(uint => CT))) pendingBalance;
+
+  // pk.x => pk.y => epochLength. number fo block one epoch contains.
+  // epoch = block.number / epochLength;
+  mapping(uint => mapping(uint => uint)) epochLength;
+
+  // pk.x => pk.y => uint(address) => lastRolloverEpoch;
+  // the epoch of last out tx of user in token.
+  // currentEpoch = currentblock.number / epoch
+  // epoch between currentEpoch and last rollover epoch is last epoch.
+  mapping(uint => mapping(uint => mapping(uint => uint))) lastRolloverEpoch;
+
+  // pk.x => pk.y => uint(address) => lastPendingEpoch;
+  mapping(uint => mapping(uint => mapping(uint => uint))) lastPendingEpoch;
+
+  // pk.x => pk.y => bool.
+  // pending status open or not.
+  mapping(uint => mapping(uint => bool)) pendingOpened;
 
   // bitSize of balance value.
   uint public constant bitSize = 16;
   uint public constant n = 4;
   uint public constant maxNumber = 2**bitSize;
-
-  // decimal.
-  uint public constant decimal = 2;
-  uint private rate = 10**decimal;
-
-  uint precision = 1 ether / rate;
 
   // public h point.
   BN128.G1Point public h;
@@ -145,20 +104,14 @@ contract PGC {
   // public g point.
   BN128.G1Point public g;
 
-  // dle sigma verifier.
-  DLESigmaVerifier public dleSigmaVerifier;
-
-  // range proof verifier.
-  RangeProofVerifier public rangeProofVerifier;
-
-  // sigma verifier.
-  SigmaVerifier public sigmaVerifier;
-
   // params.
   PublicParams public params;
 
   // token converter.
   TokenConverter public tokenConverter;
+
+  // proof verifier.
+  PGCVerifier public pgcVerifier;
 
   // events
   event LogDepositAccount(address indexed proxy, address indexed token, uint tox, uint toy, uint amount, uint time);
@@ -166,13 +119,11 @@ contract PGC {
   event LogBurn(address indexed proxy, address indexed receiver, address indexed token, uint accountx, uint accounty, uint amount, uint time);
   event LogBurnPart(address indexed proxy, address indexed receiver, address indexed token, uint accountx, uint accounty, uint amount, uint time);
 
-  //
-  constructor(address params_, address dleSigmaVerifier_, address rangeProofVerifier_, address sigmaVerifier_, address tokenConverter_) public {
-    params = PublicParams(params_);
-    dleSigmaVerifier = DLESigmaVerifier(dleSigmaVerifier_);
-    rangeProofVerifier = RangeProofVerifier(rangeProofVerifier_);
-    sigmaVerifier = SigmaVerifier(sigmaVerifier_);
+  // constructor.
+  constructor(address params_, address pgcVerifier_, address tokenConverter_) public {
+    pgcVerifier = PGCVerifier(pgcVerifier_);
     tokenConverter = TokenConverter(tokenConverter_);
+    params = PublicParams(params_);
 
     uint[2] memory tmpH = params.getH();
     uint[2] memory tmpG = params.getG();
@@ -182,6 +133,38 @@ contract PGC {
     g.X = tmpG[0];
     g.Y = tmpG[1];
     require(bitSize == params.getBitSize(), "bitsize not equal");
+  }
+
+  // pgc account open the capacity of pending state.
+  // the incoming tx will be set to pending state not to current state directly.
+  function openPending(uint x, uint y, uint epochLength_, uint[2] memory sig) public {
+    require (!pendingOpened[x][y], "pending already opened");
+    // verify sig.
+    uint hash = uint(keccak256(abi.encodePacked(x, y, epochLength_))).mod();
+    require(verifySig(hash, x, y, sig[0], sig[1]), "verify open pending sig failed");
+
+    // epoch length can't below 5.
+    if (epochLength_ < 5) {
+      // set default epoch length value.
+      epochLength_ = 50;
+    }
+
+    if (epochLength[x][y] != 0) {
+      epochLength[x][y] = epochLength_;
+    }
+
+    pendingOpened[x][y] = true;
+  }
+
+  // pgc account close the capacity of pending state.
+  function closePending(uint x, uint y, uint[2] memory sig) public {
+    require(pendingOpened[x][y], "pending already closed");
+    // verify sig.
+    uint hash = uint(keccak256(abi.encodePacked(x, y))).mod();
+    require(verifySig(hash, x, y, sig[0], sig[1]), "verify close pending sig failed");
+
+    epochLength[x][y] = 0;
+    pendingOpened[x][y] = false;
   }
 
   /*
@@ -201,11 +184,9 @@ contract PGC {
       pgcAmount = tokenConverter.convertToPGC(tokenAddr, tokenAmount);
     }
 
-    // encrypt amount and store on chain.
-    CT storage userBalance = balance[publicKey[0]][publicKey[1]][uint(tokenAddr)];
-    CT memory deposited = encrypt(pgcAmount, BN128.G1Point(publicKey[0], publicKey[1]));
-    userBalance.X = userBalance.X.add(deposited.X);
-    userBalance.Y = userBalance.Y.add(deposited.Y);
+    // encrypt amount and pending it.
+    CT memory pb = encrypt(pgcAmount, BN128.G1Point(publicKey[0], publicKey[1]));
+    toBalanceOrPending(pb, publicKey[0], publicKey[1], uint(tokenAddr));
 
     emit LogDepositAccount(msg.sender, tokenAddr, publicKey[0], publicKey[1], pgcAmount, now);
 
@@ -266,77 +247,26 @@ contract PGC {
   function transfer(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint token, uint nonce, uint[2] memory sig) public returns(bool) {
     // check for sig and nonce.
     require(verifyTransferSig(points, scalar, rpoints, l, r, token, nonce, sig), "verify sig failed for transfertx");
-    CT storage userBalance = balance[points[0]][points[1]][token];
-    require(nonce == userBalance.nonce, "invalid nonce");
+
     Board memory b;
-    // check v in ct1 == c in ct2.
-    for (b.i = 0; b.i < 20; b.i++) {
-      b.sigmaPoints[b.i] = points[b.i];
-    }
-    require(sigmaVerifier.verifySigmaProof(b.sigmaPoints, scalar[0], scalar[1], scalar[2]), "sigma verify failed");
+    (b.userBalance, b.localNonce) = getUserBalance(points[0], points[1], address(token));
+    // check for nonce.
+    require(nonce == b.localNonce, "invalid nonce");
 
-    // check balance updated is same with refreshed balance.
-    b.ct1.X = BN128.G1Point(points[2], points[3]);
-    b.ct1.Y = BN128.G1Point(points[4], points[5]);
-    for (b.i = 0; b.i < 4; b.i++) {
-      b.ct1Points[b.i] = points[2+b.i];
-    }
-    // get tmp balance = alice'balnce - transfer'balance
-    b.tmpUpdatedBalance.X = userBalance.X.add(b.ct1.X.neg());
-    b.tmpUpdatedBalance.Y = userBalance.Y.add(b.ct1.Y.neg());
-    b.refreshBalance.X = BN128.G1Point(points[20], points[21]);
-    b.refreshBalance.Y = BN128.G1Point(points[22], points[23]);
-    b.dleSigmaPoints[0] = BN128.G1Point(points[24], points[25]);
-    b.dleSigmaPoints[1] = BN128.G1Point(points[26], points[27]);
-    // only this failed.
-    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[3]), "dle sigma proof failed");
-
-    // check range proof 1.
-    for (b.i = 0; b.i < 8; b.i++) {
-      b.rpoints[b.i] = rpoints[b.i];
-    }
-    // set ct1.Y (commitment).
-    b.rpoints[8] = points[4];
-    b.rpoints[9] = points[5];
-    for (b.i = 0; b.i < 2*n; b.i++) {
-      b.l[b.i] = l[b.i];
-      b.r[b.i] = r[b.i];
-    }
-    for (b.i = 0; b.i < 5; b.i++) {
-      b.rscalar[b.i] = scalar[4+b.i];
-    }
-    require(rangeProofVerifier.verifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 1 failed");
-
-    // check range proof 2.
-    for (b.i = 0; b.i < 8; b.i++) {
-      b.rpoints[b.i] = rpoints[8+b.i];
-    }
-    b.rpoints[8] = points[22];
-    b.rpoints[9] = points[23];
-    for (b.i = 0; b.i < 2*n; b.i++) {
-      b.l[b.i] = l[b.i+2*n];
-      b.r[b.i] = r[b.i+2*n];
-    }
-    for (b.i = 0; b.i < 5; b.i++) {
-      b.rscalar[b.i] = scalar[9+b.i];
-    }
-    require(rangeProofVerifier.verifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 2 verify failed");
+    require(pgcVerifier.verifyTransfer(points, scalar, rpoints, l, r, b.userBalance), "verify proofs for transfer failed");
 
     // update sender's balance.
-    userBalance.X = b.tmpUpdatedBalance.X;
-    userBalance.Y = b.tmpUpdatedBalance.Y;
-    // update sender's nonce.
-    userBalance.nonce = nonce + 1;
+    b.ct1.X = BN128.G1Point(points[2], points[3]);
+    b.ct1.Y = BN128.G1Point(points[4], points[5]);
+    b.tmpUpdatedBalance = getBalanceCanSpentInternal(points[0], points[1], token);
+    b.tmpUpdatedBalance.X = b.tmpUpdatedBalance.X.add(b.ct1.X.neg());
+    b.tmpUpdatedBalance.Y = b.tmpUpdatedBalance.Y.add(b.ct1.Y.neg());
+    rolloverAndUpdate(b.tmpUpdatedBalance, points[0], points[1], token);
 
-    // update receiver's balance.
-    CT storage receiverBalance = balance[points[6]][points [7]][token];
+    // update receiver balance or make it to pending.
     b.ct2.X = BN128.G1Point(points[8], points[9]);
     b.ct2.Y = BN128.G1Point(points[10], points[11]);
-    for (b.i = 0; b.i < 4; b.i++) {
-      b.ct2Points[b.i] = points[8+b.i];
-    }
-    receiverBalance.X = receiverBalance.X.add(b.ct2.X);
-    receiverBalance.Y = receiverBalance.Y.add(b.ct2.Y);
+    toBalanceOrPending(b.ct2, points[6], points[7], token);
 
     // set for event.
     b.fromto[0] = points[0];
@@ -357,33 +287,14 @@ contract PGC {
     return true;
   }
 
-  function getUserBalance(uint x, uint y, address token) public view returns (uint[5] memory ct) {
-    CT memory userBalance = balance[x][y][uint(token)];
+  function getUserBalance(uint x, uint y, address token) public view returns (uint[4] memory ct, uint nonce) {
+    CT memory userBalance = getBalanceCanSpentInternal(x, y, uint(token));
     ct[0] = userBalance.X.X;
     ct[1] = userBalance.X.Y;
     ct[2] = userBalance.Y.X;
     ct[3] = userBalance.Y.Y;
-    ct[4] = userBalance.nonce;
-    return ct;
-  }
-
-  function verifyDLESigmaProof(CT memory ori, CT memory refresh, BN128.G1Point[2] memory p, uint pkx, uint pky, uint z) internal view returns(bool) {
-    BN128.G1Point memory g1 = refresh.Y.add(ori.Y.neg());
-    BN128.G1Point memory h1 = refresh.X.add(ori.X.neg());
-    uint[12] memory points;
-    points[0] = p[0].X;
-    points[1] = p[0].Y;
-    points[2] = p[1].X;
-    points[3] = p[1].Y;
-    points[4] = g1.X;
-    points[5] = g1.Y;
-    points[6] = h1.X;
-    points[7] = h1.Y;
-    points[8] = h.X;
-    points[9] = h.Y;
-    points[10] = pkx;
-    points[11] = pky;
-    return dleSigmaVerifier.verifyDLESigmaProof(points, z);
+    nonce = userBalance.nonce;
+    return (ct, nonce);
   }
 
   /*
@@ -439,70 +350,23 @@ contract PGC {
     // check sig.
     require(verifyBurnPartSig(uint(receiver), token, amount, points, scalar, rpoints, l, r, nonce, sig), "verify sig failed for burn part");
 
-    CT storage userBalance = balance[points[0]][points[1]][token];
-    require(nonce == userBalance.nonce, "invalid nonce");
     Board memory b;
+    b.token = address(token);
+    (b.userBalance, b.localNonce) = getUserBalance(points[0], points[1], b.token);
+    require(nonce == b.localNonce, "invalid nonce");
 
+    // check for proofs.
+    require(pgcVerifier.verifyBurnPart(amount, points, scalar, rpoints, l, r, b.userBalance), "verify burnpart proofs failed");
+
+    // calculate balance after transfer.
     b.ct1.X = BN128.G1Point(points[2], points[3]);
     b.ct1.Y = BN128.G1Point(points[4], points[5]);
-    b.proof[0] = points[10];
-    b.proof[1] = points[11];
-    b.proof[2] = points[12];
-    b.proof[3] = points[13];
-    // check amount is same with value in ct.
-    require(verifyEqualProof(amount, b.ct1, BN128.G1Point(points[0], points[1]), b.proof, scalar[0]), "dle sigma proof 1 failed");
-
-    // check balance updated is ame with refreshed balance.
-    b.ct1.X = BN128.G1Point(points[2], points[3]);
-    b.ct1.Y = BN128.G1Point(points[4], points[5]);
-    // tmp balance = alice'balance - burn balance.
-    b.tmpUpdatedBalance.X = userBalance.X.add(b.ct1.X.neg());
-    b.tmpUpdatedBalance.Y = userBalance.Y.add(b.ct1.Y.neg());
-    b.refreshBalance.X = BN128.G1Point(points[6], points[7]);
-    b.refreshBalance.Y = BN128.G1Point(points[8], points[9]);
-    b.dleSigmaPoints[0] = BN128.G1Point(points[14], points[15]);
-    b.dleSigmaPoints[1] = BN128.G1Point(points[16], points[17]);
-    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[1]), "dle sigma proof 2 failed");
-
-    // check range proof 1.
-    for (b.i = 0; b.i < 8; b.i++) {
-      b.rpoints[b.i] = rpoints[b.i];
-    }
-    // set ct.y
-    b.rpoints[8] = points[4];
-    b.rpoints[9] = points[5];
-    for (b.i = 0; b.i < 2*n; b.i++ ) {
-      b.l[b.i] = l[b.i];
-      b.r[b.i] = r[b.i];
-    }
-    for (b.i = 0; b.i < 5; b.i++ ) {
-      b.rscalar[b.i] = scalar[b.i+2];
-    }
-    require(rangeProofVerifier.verifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 1 failed");
-
-    // check range proof 2.
-    for (b.i = 0; b.i < 8; b.i++ ) {
-      b.rpoints[b.i] = rpoints[8+b.i];
-    }
-    b.rpoints[8] = points[8];
-    b.rpoints[9] = points[9];
-    for (b.i = 0; b.i < 2*n; b.i++ ) {
-      b.l[b.i] = l[b.i+2*n];
-      b.r[b.i] = r[b.i+2*n];
-    }
-    for (b.i = 0; b.i < 5; b.i++ ) {
-      b.rscalar[b.i] = scalar[7+b.i];
-    }
-    require(rangeProofVerifier.verifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 2 verify failed");
+    b.tmpUpdatedBalance = getBalanceCanSpentInternal(points[0], points[1], token);
+    b.tmpUpdatedBalance.X = b.tmpUpdatedBalance.X.add(b.ct1.X.neg());
+    b.tmpUpdatedBalance.Y = b.tmpUpdatedBalance.Y.add(b.ct1.Y.neg());
 
     // update sender's balance.
-    userBalance.X = b.tmpUpdatedBalance.X;
-    userBalance.Y = b.tmpUpdatedBalance.Y;
-    // update sender's nonce.
-    userBalance.nonce = nonce + 1;
-
-    b.token = address(token);
-    b.pgcAmount = amount;
+    rolloverAndUpdate(b.tmpUpdatedBalance, points[0], points[1], token);
 
     if (token == 0) {
       // transfer eth.
@@ -514,7 +378,7 @@ contract PGC {
     }
 
     // emit event.
-    emit LogBurnPart(msg.sender, receiver, b.token, points[0], points[1], b.pgcAmount, now);
+    emit LogBurnPart(msg.sender, receiver, b.token, points[0], points[1], amount, now);
   }
 
 
@@ -529,25 +393,18 @@ contract PGC {
     require(verifyBurnSig(uint(receiver), token, amount, publicKey, proof, z, nonce, sig), "invalid sig for burntx");
     // do nothing
     require(amount >= 1, "invalid amount");
-    // compute y' = Y - g*m.
-    CT storage userBalance = balance[publicKey[0]][publicKey[1]][token];
-    require(nonce == userBalance.nonce, "invalid nonce");
-    // todo: check not zero.
 
-    Board memory board;
-    CT memory ct;
-    ct.X = userBalance.X;
-    ct.Y = userBalance.Y;
-
+    // check proof.
+    uint[4] memory userBalance;
+    uint nonceSent;
+    (userBalance, nonceSent) = getUserBalance(publicKey[0], publicKey[1], address(token));
+    require(nonce == nonceSent, "invalid nonce");
     // revert when error.
-    require(verifyEqualProof(amount, ct, BN128.G1Point(publicKey[0], publicKey[1]), proof, z), "dle sigma verify failed");
+    require(pgcVerifier.verifyBurn(amount, publicKey, proof, z, userBalance), "dle sigma verify failed");
 
     // update user encrypted balance.
-    board.tmpUpdatedBalance = encrypt(0, BN128.G1Point(publicKey[0], publicKey[1]));
-    userBalance.X = board.tmpUpdatedBalance.X;
-    userBalance.Y = board.tmpUpdatedBalance.Y;
-    // update user nonce.
-    userBalance.nonce = nonce + 1;
+    CT memory tmpUpdatedBalance = encrypt(0, BN128.G1Point(publicKey[0], publicKey[1]));
+    rolloverAndUpdate(tmpUpdatedBalance, publicKey[0], publicKey[1], token);
 
     if (token == 0) {
       // transfer eth back to user.
@@ -557,28 +414,6 @@ contract PGC {
     }
 
     emit LogBurn(msg.sender, receiver, address(token), publicKey[0], publicKey[1], amount, now);
-  }
-
-  /*
-   * @dev user dle sigma proof to prove amount same in ct and one holds sk.
-   */
-  function verifyEqualProof(uint amount, CT memory ct, BN128.G1Point memory pk, uint[4] memory proof, uint z) internal view returns(bool) {
-    BN128.G1Point memory y = ct.Y.add(g.mul(amount).neg());
-    Board memory board;
-    board.dleTmpPoints[0] = proof[0];
-    board.dleTmpPoints[1] = proof[1];
-    board.dleTmpPoints[2] = proof[2];
-    board.dleTmpPoints[3] = proof[3];
-    board.dleTmpPoints[4] = y.X;
-    board.dleTmpPoints[5] = y.Y;
-    board.dleTmpPoints[6] = ct.X.X;
-    board.dleTmpPoints[7] = ct.X.Y;
-    board.dleTmpPoints[8] = h.X;
-    board.dleTmpPoints[9] = h.Y;
-    board.dleTmpPoints[10] = pk.X;
-    board.dleTmpPoints[11] = pk.Y;
-
-    return dleSigmaVerifier.verifyDLESigmaProof(board.dleTmpPoints, z);
   }
 
   /*
@@ -638,5 +473,91 @@ contract PGC {
       return false;
     }
     return true;
+  }
+
+  /*
+   * @dev return balance can be spent by public key and token address.
+   */
+  function getBalanceCanSpentInternal(uint x, uint y, uint token) internal view returns(CT memory) {
+    // add currentBalance and lastBalance not matter whether pending status
+    // open or not since lastBalance will be set to zero when closed except
+    // the first out tx after close. but it's right to add the balance since it doesn't be spent.
+    CT memory cb = currentBalance[x][y][token];
+    CT memory lb = lastBalance[x][y][token];
+    CT memory fb;
+    fb.nonce = cb.nonce;
+    fb.X = cb.X.add(lb.X);
+    fb.Y = cb.Y.add(lb.Y);
+
+    // first tx after close pending capacity.
+    // todo:
+    if (!pendingOpened[x][y] && pendingBalance[x][y][token].Y.X != 0) {
+      // will be set to zero.
+      fb.X = fb.X.add(pendingBalance[x][y][token].X);
+      fb.Y = fb.Y.add(pendingBalance[x][y][token].Y);
+    }
+
+    return fb;
+  }
+
+
+  /*
+   * @dev reduce balance of user's balance and rollover user's pending state.
+   * @dev even epoch is current epoch, also rollover it.
+   * @dev call before any out tx.
+   */
+  function rolloverAndUpdate(CT memory balance, uint x, uint y, uint token) internal {
+    currentBalance[x][y][token] = balance;
+    currentBalance[x][y][token].nonce = balance.nonce.add(1);
+
+    // set last balance to zero.
+    if (lastBalance[x][y][token].Y.X != 0) {
+      lastBalance[x][y][token].X = BN128.G1Point(0, 0);
+      lastBalance[x][y][token].Y = BN128.G1Point(0, 0);
+    }
+
+    // set pending balance to zero if pending not opened.
+    if (!pendingOpened[x][y] && pendingBalance[x][y][token].Y.X != 0) {
+      pendingBalance[x][y][token].X = BN128.G1Point(0, 0);
+      pendingBalance[x][y][token].Y = BN128.G1Point(0, 0);
+    }
+  }
+
+  /*
+   * @dev add balance to user' balance or pending.
+   */
+  function toBalanceOrPending(CT memory balance, uint x, uint y, uint token) internal {
+    // not open pending capacity.
+    if (!pendingOpened[x][y]) {
+      CT storage cb = currentBalance[x][y][token];
+      cb.X = cb.X.add(balance.X);
+      cb.Y = cb.Y.add(balance.Y);
+
+      // at this point, the last balance and pending balance may not zero, but it will be calculated when user burn/transfer.
+
+      return;
+    }
+
+    // try to pending this tx.
+    uint currentEpoch = block.number / epochLength[x][y];
+    // just pending ct to pending state.
+    if (currentEpoch == lastPendingEpoch[x][y][token]) {
+      pendingBalance[x][y][token].X = pendingBalance[x][y][token].X.add(balance.X);
+      pendingBalance[x][y][token].Y = pendingBalance[x][y][token].Y.add(balance.Y);
+
+      return;
+    }
+
+    // currentEpoch is bigger than last pending epoch. so just add pending balance to last balance and set pending balance to ct.
+    // currentEpoch always >= lastpendingepoch.
+    CT storage lb = lastBalance[x][y][token];
+    CT storage pb = pendingBalance[x][y][token];
+    lb.X = lb.X.add(pb.X);
+    lb.Y = lb.Y.add(pb.Y);
+    // reset pending state.
+    pb.X = balance.X;
+    pb.Y = balance.Y;
+    // reset last pending epoch.
+    lastPendingEpoch[x][y][token] = currentEpoch;
   }
 }

@@ -45,6 +45,9 @@ var contractsName = []map[string]string{
 	{
 		"name": "TokenConverter",
 	},
+	{
+		"name": "PGCVerifier",
+	},
 }
 
 // GenerateGoCode automatically generates go files for contract defined in truffle contracts.
