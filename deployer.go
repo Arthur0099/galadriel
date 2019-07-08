@@ -36,6 +36,27 @@ func waitFor(tx common.Hash, client *ethclient.Client) {
 	}
 }
 
+func waitForBlocks(n uint64, client *ethclient.Client) {
+	log.Debug("wait for blocks to be mined", "amount", n)
+	var currentNumber uint64
+	for currentNumber == 0 {
+		if currentBlock, err := client.BlockByNumber(context.Background(), nil); err == nil {
+			currentNumber = currentBlock.Number().Uint64()
+		}
+	}
+	log.Debug("start pos", "number", currentNumber)
+	for {
+		block, err := client.BlockByNumber(context.Background(), nil)
+		if err != nil || block.Number().Uint64()-currentNumber < n {
+			time.Sleep(time.Second * 10)
+			continue
+		}
+		log.Debug("advance to block", "number", block.Number())
+
+		return
+	}
+}
+
 // NewPGCContracts returns deployed contracts.
 func NewPGCContracts(dle, ip, pgcc, pp, rv, sv common.Address, client *ethclient.Client) *Contracts {
 	c := Contracts{}

@@ -53,6 +53,23 @@ func (c *Client) SendTx(tx *Transaction) (common.Hash, error) {
 	return res, err
 }
 
+// Mine mines n blocks.
+func (c *Client) Mine(n int) error {
+	for i := 0; i < n; i++ {
+		if err := c.EVMMine(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// EVMMine mines a block on chain.
+// Only available in ganache-cli.
+func (c *Client) EVMMine() error {
+	return c.client.Call(nil, "evm_mine")
+}
+
 // SendETH send ether to one.
 func (c *Client) SendETH(from common.Address, to common.Address, amount *big.Int) (common.Hash, error) {
 	ether := new(big.Int).SetUint64(1000 * 1000 * 1000 * 1000 * 1000 * 1000)

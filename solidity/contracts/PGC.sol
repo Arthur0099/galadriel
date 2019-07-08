@@ -138,7 +138,7 @@ contract PGC {
   // pgc account open the capacity of pending state.
   // the incoming tx will be set to pending state not to current state directly.
   function openPending(uint x, uint y, uint epochLength_, uint[2] memory sig) public {
-    require (!pendingOpened[x][y], "pending already opened");
+    require(!pendingOpened[x][y], "pending already opened");
     // verify sig.
     uint hash = uint(keccak256(abi.encodePacked(x, y, epochLength_))).mod();
     require(verifySig(hash, x, y, sig[0], sig[1]), "verify open pending sig failed");
@@ -149,10 +149,7 @@ contract PGC {
       epochLength_ = 50;
     }
 
-    if (epochLength[x][y] != 0) {
-      epochLength[x][y] = epochLength_;
-    }
-
+    epochLength[x][y] = epochLength_;
     pendingOpened[x][y] = true;
   }
 
@@ -497,6 +494,12 @@ contract PGC {
       fb.Y = fb.Y.add(pendingBalance[x][y][token].Y);
     }
 
+    // no in tx changes pending balance to last balance in epoch.
+    if (pendingOpened[x][y] && pendingBalance[x][y][token].Y.X != 0 && block.number/epochLength[x][y] > lastPendingEpoch[x][y][token]) {
+      fb.X = fb.X.add(pendingBalance[x][y][token].X);
+      fb.Y = fb.Y.add(pendingBalance[x][y][token].Y);
+    }
+
     return fb;
   }
 
@@ -510,7 +513,7 @@ contract PGC {
     currentBalance[x][y][token] = balance;
     currentBalance[x][y][token].nonce = balance.nonce.add(1);
 
-    // set last balance to zero.
+    // set last balance to zero. already be calculated.
     if (lastBalance[x][y][token].Y.X != 0) {
       lastBalance[x][y][token].X = BN128.G1Point(0, 0);
       lastBalance[x][y][token].Y = BN128.G1Point(0, 0);
@@ -520,6 +523,18 @@ contract PGC {
     if (!pendingOpened[x][y] && pendingBalance[x][y][token].Y.X != 0) {
       pendingBalance[x][y][token].X = BN128.G1Point(0, 0);
       pendingBalance[x][y][token].Y = BN128.G1Point(0, 0);
+    }
+
+    // first out tx in epoch.
+    // no need to check lastPendingEpoch is zero or not. any in tx will update it. and without in tx, one just send any out tx.
+    if (pendingOpened[x][y] && block.number/epochLength[x][y] > lastPendingEpoch[x][y][token]) {
+      lastPendingEpoch[x][y][token] = block.number/epochLength[x][y];
+
+      // this can be spent, so set it to zero.
+      if (pendingBalance[x][y][token].Y.X != 0) {
+        pendingBalance[x][y][token].X = BN128.G1Point(0, 0);
+        pendingBalance[x][y][token].Y = BN128.G1Point(0, 0);
+      }
     }
   }
 
@@ -538,20 +553,20 @@ contract PGC {
       return;
     }
 
+    CT storage lb = lastBalance[x][y][token];
+    CT storage pb = pendingBalance[x][y][token];
     // try to pending this tx.
     uint currentEpoch = block.number / epochLength[x][y];
     // just pending ct to pending state.
     if (currentEpoch == lastPendingEpoch[x][y][token]) {
-      pendingBalance[x][y][token].X = pendingBalance[x][y][token].X.add(balance.X);
-      pendingBalance[x][y][token].Y = pendingBalance[x][y][token].Y.add(balance.Y);
+      pb.X = pb.X.add(balance.X);
+      pb.Y = pb.Y.add(balance.Y);
 
       return;
     }
 
     // currentEpoch is bigger than last pending epoch. so just add pending balance to last balance and set pending balance to ct.
     // currentEpoch always >= lastpendingepoch.
-    CT storage lb = lastBalance[x][y][token];
-    CT storage pb = pendingBalance[x][y][token];
     lb.X = lb.X.add(pb.X);
     lb.Y = lb.Y.add(pb.Y);
     // reset pending state.

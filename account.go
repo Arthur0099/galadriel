@@ -41,3 +41,8 @@ func (a *Account) UpdateBalance(data CT) {
 	a.balance.Y = NewECPoint(data.Ct[2], data.Ct[3], a.sk.Curve)
 	a.nonce = data.Nonce.Uint64()
 }
+
+// UpdateBalanceSn .
+func (a *Account) UpdateBalanceSn(m *big.Int) {
+	a.m.Set(m)
+}

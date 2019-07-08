@@ -271,7 +271,7 @@ func decryptEncodedMsg(encodeMsg *ECPoint) []byte {
 	upperLimit := new(big.Int).Exp(two, new(big.Int).SetUint64(bit), nil)
 	g := params.GetG()
 
-	for i := uint64(1); i < upperLimit.Uint64(); i++ {
+	for i := uint64(0); i < upperLimit.Uint64(); i++ {
 		point := new(ECPoint).ScalarMult(g, new(big.Int).SetUint64(i))
 		if point.Equals(encodeMsg) {
 			return new(big.Int).SetUint64(i).Bytes()

@@ -18,6 +18,8 @@ var (
 	testGasLimit = uint64(7000000)
 )
 
+var parsed abi.ABI
+
 // ComputeChallenge computes challenge x using hash func(hash(pack(data))).
 // todo: same with Keccak256(a1, a2, b1, b2) in solidity.
 // use abi.Arguments.Pack(A1, A2, B1, B2)
@@ -44,65 +46,30 @@ func ComputeChallenge(order *big.Int, data ...interface{}) (*big.Int, error) {
 
 // HashTransfer returns the hash of transfer input.
 func HashTransfer(tx *transferTx, token common.Address) ([]byte, error) {
-	parsed, err := abi.JSON(strings.NewReader(contracts.PgcABI))
-	if err != nil {
-		return nil, err
-	}
-
-	name := "transfer"
-	method, exist := parsed.Methods[name]
-	if !exist {
-		return nil, fmt.Errorf("method '%s' not found", name)
-	}
-
-	if len(method.Inputs) <= 1 {
-		return nil, fmt.Errorf("no enough inputs for compute hash for '%s", name)
-	}
-	// remove last input which is always sig.
-	arguments := method.Inputs[0 : len(method.Inputs)-1]
-	data, err := arguments.Pack(tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, new(big.Int).SetBytes(token.Bytes()), tx.nonce)
-	if err != nil {
-		return nil, err
-	}
-
-	return Keccak256(data), nil
+	return hash(parsed, "transfer", tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, new(big.Int).SetBytes(token.Bytes()), tx.nonce)
 }
 
 // HashBurn returns the hash of burn input.
 func HashBurn(receiver, token common.Address, tx *burnTx) ([]byte, error) {
-	parsed, err := abi.JSON(strings.NewReader(contracts.PgcABI))
-	if err != nil {
-		return nil, err
-	}
-
-	name := "verifyBurnSig"
-	method, exist := parsed.Methods[name]
-	if !exist {
-		return nil, fmt.Errorf("method '%s' not found", name)
-	}
-
-	if len(method.Inputs) <= 1 {
-		return nil, fmt.Errorf("no enough inputs for compute hash for '%s", name)
-	}
-	// remove last input which is always sig.
-	arguments := method.Inputs[0 : len(method.Inputs)-1]
-	data, err := arguments.Pack(new(big.Int).SetBytes(receiver.Bytes()), new(big.Int).SetBytes(token.Bytes()), tx.amount, tx.pk, tx.proof, tx.z, tx.nonce)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Printf("%x\n", data)
-
-	return Keccak256(data), nil
+	return hash(parsed, "verifyBurnSig", new(big.Int).SetBytes(receiver.Bytes()), new(big.Int).SetBytes(token.Bytes()), tx.amount, tx.pk, tx.proof, tx.z, tx.nonce)
 }
 
 // HashBurnPart returns hash of burnPart.
 func HashBurnPart(receiver, token common.Address, tx *burnPartTx) ([]byte, error) {
-	parsed, err := abi.JSON(strings.NewReader(contracts.PgcABI))
-	if err != nil {
-		return nil, err
-	}
+	return hash(parsed, "verifyBurnPartSig", new(big.Int).SetBytes(receiver.Bytes()), new(big.Int).SetBytes(token.Bytes()), tx.amount, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, tx.nonce)
+}
 
-	name := "verifyBurnPartSig"
+// HashOpenPending returns hash of openPending.
+func HashOpenPending(x, y, epoch *big.Int) ([]byte, error) {
+	return hash(parsed, "openPending", x, y, epoch)
+}
+
+// HashClosePending returns hash of closePending.
+func HashClosePending(x, y *big.Int) ([]byte, error) {
+	return hash(parsed, "closePending", x, y)
+}
+
+func hash(parsedABI abi.ABI, name string, params ...interface{}) ([]byte, error) {
 	method, exist := parsed.Methods[name]
 	if !exist {
 		return nil, fmt.Errorf("method '%s' not found", name)
@@ -112,7 +79,7 @@ func HashBurnPart(receiver, token common.Address, tx *burnPartTx) ([]byte, error
 		return nil, fmt.Errorf("no enough inputs for compute hash for '%s", name)
 	}
 	arguments := method.Inputs[0 : len(method.Inputs)-1]
-	data, err := arguments.Pack(new(big.Int).SetBytes(receiver.Bytes()), new(big.Int).SetBytes(token.Bytes()), tx.amount, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, tx.nonce)
+	data, err := arguments.Pack(params...)
 	if err != nil {
 		return nil, err
 	}
@@ -166,4 +133,8 @@ func LowerCaseFirst(data string) string {
 	runeStr := []rune(data)
 	runeStr[0] = unicode.ToLower(runeStr[0])
 	return string(runeStr)
+}
+
+func init() {
+	parsed, _ = abi.JSON(strings.NewReader(contracts.PgcABI))
 }

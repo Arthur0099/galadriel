@@ -138,31 +138,37 @@ func TestLocal(t *testing.T) {
 	_, err = rpcClient.SendETH(accounts[0], sender.From, amount)
 	require.Nil(t, err, "send eth failed")
 
+	cs := DeployPGCContracts(sender, client)
+
 	// test for eth.
-	testPGCFlow(sender, client, t, nil, common.Address{})
+	testPGCFlow(sender, client, t, nil, common.Address{}, cs)
 
 	// test for token.
 	tokenContract, tokenAddr := DeployToken(sender, client)
-	testPGCFlow(sender, client, t, tokenContract, tokenAddr)
+	testPGCFlow(sender, client, t, tokenContract, tokenAddr, cs)
+
+	// test for pending capacity.
+	testPGCPending(sender, rpcClient, client, t, tokenContract, tokenAddr, cs)
 }
 
 func TestRopsten(t *testing.T) {
 	sender := GetRopstenAccount()
 	sender.GasPrice = new(big.Int).SetUint64(10 * 1000 * 1000 * 1000)
 	client := GetRopstenInfura()
-	//testPGCFlow(sender, client, t, nil, common.Address{})
+	cs := DeployPGCContracts(sender, client)
+	//testPGCFlow(sender, client, t, nil, common.Address{}, cs)
 
 	// test for token.
 	tokenContract, tokenAddr := DeployToken(sender, client)
-	testPGCFlow(sender, client, t, tokenContract, tokenAddr)
+	testPGCFlow(sender, client, t, tokenContract, tokenAddr, cs)
+
+	// test for pending capacity.
+	testPGCPending(sender, nil, client, t, tokenContract, tokenAddr, cs)
 }
 
-// 0x10154bad
-
-func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing.T, tokenContract *contracts.Token, token common.Address) {
+func testPGCPending(sender *bind.TransactOpts, rpcClient *Client, client *ethclient.Client, t *testing.T, tokenContract *contracts.Token, token common.Address, cs *Contracts) {
 	var err error
 	sender.GasLimit = testGasLimit
-	cs := DeployPGCContracts(sender, client)
 
 	// if test for token.
 	// approve to contract first.
@@ -174,14 +180,185 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 		waitFor(approveTx.Hash(), client)
 		sender.Nonce.Add(sender.Nonce, one)
 
-		// add token contract to tokenconvert.
-		addTokenTx, err := cs.TokenConverter.AddToken(sender, token, one, "")
-		if err != nil {
-			panic(err)
+		added, _, _, _ := cs.TokenConverter.GetTokenInfo(nil, token)
+		if !added {
+			// add token contract to tokenconvert.
+			addTokenTx, err := cs.TokenConverter.AddToken(sender, token, one, "")
+			if err != nil {
+				panic(err)
+			}
+			t.Log("add token to tokenconverter", "tx", addTokenTx.Hash().Hex())
+			waitFor(addTokenTx.Hash(), client)
+			sender.Nonce.Add(sender.Nonce, one)
+
 		}
-		t.Log("add token to tokenconverter", "tx", addTokenTx.Hash().Hex())
-		waitFor(addTokenTx.Hash(), client)
+
+	}
+
+	// generate alice, bob account.
+	aliceInitBalance := new(big.Int).SetUint64(500)
+	alice := CreateTestAccount("alice", aliceInitBalance)
+	sender.Value = new(big.Int).Mul(ether, aliceInitBalance)
+	sender.Value.Div(sender.Value, precision)
+	if tokenContract != nil {
+		sender.Value = nil
+	}
+	alicePK := [2]*big.Int{alice.sk.PublicKey.X, alice.sk.PublicKey.Y}
+	aliceTx, err := cs.PGC.DepositAccount(sender, alicePK, token, aliceInitBalance)
+	require.Nil(t, err, "deposit contract failed")
+	waitFor(aliceTx.Hash(), client)
+	sender.Nonce.Add(sender.Nonce, one)
+
+	// check for alice's encrypted balance.
+	aliceEncryptB, _ := cs.PGC.GetUserBalance(nil, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, token)
+	aliceDecryptB := Decrypt(alice.sk, arrayToCT(aliceEncryptB, alice.sk.Curve))
+	require.Equal(t, aliceInitBalance.Bytes(), aliceDecryptB, "alice'balance on chain not same with local")
+
+	// keep balance same with chain.
+	alice.UpdateBalance(aliceEncryptB)
+
+	// generate bob.
+	bobInitBalance := new(big.Int).SetUint64(500)
+	bob := CreateTestAccount("bob", bobInitBalance)
+	// bob open pending capacity.
+	bobEpoch := new(big.Int).SetUint64(50)
+	bobOpenPendingHash, err := HashOpenPending(bob.sk.PublicKey.X, bob.sk.PublicKey.Y, bobEpoch)
+	require.Nil(t, err, "hash open pending failed")
+	bobOpenPendingSig, err := Sign(bob.sk, bobOpenPendingHash)
+	require.Nil(t, err, "sig for open pending failed")
+	openPendingTx, err := cs.PGC.OpenPending(sender, bob.sk.PublicKey.X, bob.sk.PublicKey.Y, bobEpoch, bobOpenPendingSig.ToInputs())
+	require.Nil(t, err, "open pending tx failed")
+	t.Log("open pending tx", openPendingTx.Hash().Hex())
+	waitFor(openPendingTx.Hash(), client)
+	sender.Value = new(big.Int).Mul(ether, bobInitBalance)
+	sender.Value.Div(sender.Value, precision)
+	if tokenContract != nil {
+		sender.Value = nil
+	}
+	sender.Nonce.Add(sender.Nonce, one)
+	bobPK := [2]*big.Int{bob.sk.PublicKey.X, bob.sk.PublicKey.Y}
+	bobTx, err := cs.PGC.DepositAccount(sender, bobPK, token, bobInitBalance)
+	require.Nil(t, err, "deposit to bob on chain failed")
+	waitFor(bobTx.Hash(), client)
+	sender.Nonce.Add(sender.Nonce, one)
+
+	// check for bob's encrypted balance.
+	bobEncryptB, _ := cs.PGC.GetUserBalance(nil, bob.sk.PublicKey.X, bob.sk.PublicKey.Y, token)
+	bobDecryptB := Decrypt(bob.sk, arrayToCT(bobEncryptB, bob.sk.Curve))
+	// because bob open pending capacity, so it won't update bob's balance(can spend) directly, pending it in epoch it arrives.
+	require.Equal(t, new(big.Int).SetUint64(0).Bytes(), bobDecryptB, "bob's balance updated in pending epoch(wrong)")
+
+	// advance block number after block.
+	if rpcClient != nil {
+		_ = rpcClient.Mine(int(bobEpoch.Uint64()))
+	} else {
+		waitForBlocks(bobEpoch.Uint64(), client)
+	}
+
+	// at this epoch, bob can use pgc sent before current epoch.
+	bobEncryptB, _ = cs.PGC.GetUserBalance(nil, bob.sk.PublicKey.X, bob.sk.PublicKey.Y, token)
+	bobDecryptB = Decrypt(bob.sk, arrayToCT(bobEncryptB, bob.sk.Curve))
+	require.Equal(t, bobInitBalance.Bytes(), bobDecryptB, "bob's balance not same with excepted after pending epoch")
+	// keep balance same with chain.
+	bob.UpdateBalance(bobEncryptB)
+
+	// alice open pending capacity.
+	aliceEpoch := new(big.Int).SetUint64(50)
+	aliceOpenPendingHash, _ := HashOpenPending(alice.sk.PublicKey.X, alice.sk.PublicKey.Y, aliceEpoch)
+	aliceOpenPendingSig, _ := Sign(alice.sk, aliceOpenPendingHash)
+	aliceOpenPendingTx, err := cs.PGC.OpenPending(sender, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, aliceEpoch, aliceOpenPendingSig.ToInputs())
+	require.Nil(t, err, "alice open pending capacity tx failed")
+	t.Log("open pending tx", aliceOpenPendingTx.Hash().Hex())
+	waitFor(aliceOpenPendingTx.Hash(), client)
+	sender.Nonce.Add(sender.Nonce, one)
+
+	// bob transfer 50 amount to alice.
+	transferAmount := new(big.Int).SetUint64(50)
+	ctx, err := CreateCTX(bob, &alice.sk.PublicKey, transferAmount)
+	require.Nil(t, err, "create transfer tx from bob to alice failed")
+	transferTx := ctxToTransferTx(ctx)
+	transferHash, err := HashTransfer(transferTx, token)
+	require.Nil(t, err, "hash transfer data failed")
+	transferSig, err := Sign(bob.sk, transferHash)
+	require.Nil(t, err, "sig for transfer tx failed")
+	sender.Value = nil
+	transferTxHash, err := cs.PGC.Transfer(sender, transferTx.points, transferTx.scalar, transferTx.rpoints, transferTx.l, transferTx.r, new(big.Int).SetBytes(token.Bytes()), transferTx.nonce, transferSig.ToInputs())
+	require.Nil(t, err, "transfer tx failed")
+	waitFor(transferTxHash.Hash(), client)
+	t.Log("transfer from bob to alice", transferAmount, transferTxHash.Hash().Hex())
+	sender.Nonce.Add(sender.Nonce, one)
+
+	// check for bob's and alice's balance.
+	bobEncryptBalanceAfter, _ := cs.PGC.GetUserBalance(nil, bob.sk.PublicKey.X, bob.sk.PublicKey.Y, token)
+	bobExceptBalance := new(big.Int).Sub(bobInitBalance, transferAmount)
+	bobBalanceAfter := Decrypt(bob.sk, arrayToCT(bobEncryptBalanceAfter, bob.sk.Curve))
+	require.Equal(t, bobExceptBalance.Bytes(), bobBalanceAfter, "bob balance after transfer is not correct")
+	aliceEncrypteBalanceAfter, _ := cs.PGC.GetUserBalance(nil, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, token)
+	aliceExpectBalance := aliceInitBalance
+	aliceBalanceAfter := Decrypt(alice.sk, arrayToCT(aliceEncrypteBalanceAfter, alice.sk.Curve))
+	require.Equal(t, aliceExpectBalance.Bytes(), aliceBalanceAfter, "alice's balance not correct after transfer")
+
+	// alice close pending capacity.
+	closePendingHash, _ := HashClosePending(alice.sk.PublicKey.X, alice.sk.PublicKey.Y)
+	closePendingSig, _ := Sign(alice.sk, closePendingHash)
+	closePendingTx, err := cs.PGC.ClosePending(sender, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, closePendingSig.ToInputs())
+	require.Nil(t, err, "alice close pending failed")
+	t.Log("alice close pending tx", closePendingTx.Hash().Hex())
+	waitFor(closePendingTx.Hash(), client)
+	sender.Nonce.Add(sender.Nonce, one)
+
+	// alice burn part amount.
+	aliceBalanceEn, _ := cs.PGC.GetUserBalance(nil, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, token)
+	aliceBalanceEx := new(big.Int).Add(aliceInitBalance, transferAmount)
+	aliceBalanceDe := Decrypt(alice.sk, arrayToCT(aliceBalanceEn, alice.sk.Curve))
+	require.Equal(t, aliceBalanceEx.Bytes(), aliceBalanceDe, "alice's balance not correct after close pending capacity")
+	alice.UpdateBalance(aliceBalanceEn)
+	alice.UpdateBalanceSn(aliceBalanceEx)
+	burnAmount := new(big.Int).SetUint64(520)
+	burnPartTx, err := CreateBurnPartTx(alice, burnAmount)
+	require.Nil(t, err, "create burn part tx failed")
+	receiver := sender.From
+	burnPartTTx := txToBurnPartTx(burnPartTx)
+	burnHash, _ := HashBurnPart(receiver, token, burnPartTTx)
+	burnSig, _ := Sign(alice.sk, burnHash)
+	burnTx, err := cs.PGC.BurnPart(sender, receiver, new(big.Int).SetBytes(token.Bytes()), burnPartTTx.amount, burnPartTTx.points, burnPartTTx.scalar, burnPartTTx.rpoints, burnPartTTx.l, burnPartTTx.r, burnPartTTx.nonce, burnSig.ToInputs())
+	t.Log("burn part tx", burnTx.Hash().Hex())
+	waitFor(burnTx.Hash(), client)
+
+	// check alice's balance
+	aliceFinalEnB, _ := cs.PGC.GetUserBalance(nil, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, token)
+	aliceFinalExpect := new(big.Int).Sub(aliceBalanceEx, burnAmount)
+	aliceFinalActual := Decrypt(alice.sk, arrayToCT(aliceFinalEnB, alice.sk.Curve))
+	require.Equal(t, aliceFinalExpect.Bytes(), aliceFinalActual, "aclie' balance not correct")
+}
+
+func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing.T, tokenContract *contracts.Token, token common.Address, cs *Contracts) {
+	var err error
+	sender.GasLimit = testGasLimit
+
+	// if test for token.
+	// approve to contract first.
+	if tokenContract != nil {
+		approveAmount := new(big.Int).SetUint64(1000)
+
+		approveTx, err := tokenContract.Approve(sender, cs.PGCAddress, approveAmount)
+		require.Nil(t, err, "approve for token failed")
+		waitFor(approveTx.Hash(), client)
 		sender.Nonce.Add(sender.Nonce, one)
+
+		added, _, _, _ := cs.TokenConverter.GetTokenInfo(nil, token)
+		if !added {
+			// add token contract to tokenconvert.
+			addTokenTx, err := cs.TokenConverter.AddToken(sender, token, one, "")
+			if err != nil {
+				panic(err)
+			}
+			t.Log("add token to tokenconverter", "tx", addTokenTx.Hash().Hex())
+			waitFor(addTokenTx.Hash(), client)
+			sender.Nonce.Add(sender.Nonce, one)
+
+		}
+
 	}
 
 	// generate alice, bob account.
