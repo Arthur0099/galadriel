@@ -1,6 +1,7 @@
 package pgc
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"math/big"
@@ -60,13 +61,13 @@ func HashBurnPart(receiver, token common.Address, tx *burnPartTx) ([]byte, error
 }
 
 // HashOpenPending returns hash of openPending.
-func HashOpenPending(x, y, epoch *big.Int) ([]byte, error) {
-	return hash(parsed, "openPending", x, y, epoch)
+func HashOpenPending(x, y, epoch, nonce *big.Int) ([]byte, error) {
+	return hash(parsed, "openPending", x, y, epoch, nonce)
 }
 
 // HashClosePending returns hash of closePending.
-func HashClosePending(x, y *big.Int) ([]byte, error) {
-	return hash(parsed, "closePending", x, y)
+func HashClosePending(x, y, nonce *big.Int) ([]byte, error) {
+	return hash(parsed, "closePending", x, y, nonce)
 }
 
 func hash(parsedABI abi.ABI, name string, params ...interface{}) ([]byte, error) {
@@ -85,6 +86,14 @@ func hash(parsedABI abi.ABI, name string, params ...interface{}) ([]byte, error)
 	}
 
 	return Keccak256(data), nil
+}
+
+// Sha256Hash returns hash bytes using sha256.
+func Sha256Hash(data []byte) []byte {
+	h := sha256.New()
+	// Hash.Write never returns an error per godoc
+	h.Write(data)
+	return h.Sum(nil)
 }
 
 // BitVector returns vector containing the bits of v.

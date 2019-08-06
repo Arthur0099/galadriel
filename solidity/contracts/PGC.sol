@@ -93,6 +93,9 @@ contract PGC {
   // pending status open or not.
   mapping(uint => mapping(uint => bool)) pendingOpened;
 
+  // pk.x => pk.y => uint.
+  mapping(uint => mapping(uint => uint)) pendingFunNonce;
+
   // bitSize of balance value.
   uint public constant bitSize = 16;
   uint public constant n = 4;
@@ -137,10 +140,12 @@ contract PGC {
 
   // pgc account open the capacity of pending state.
   // the incoming tx will be set to pending state not to current state directly.
-  function openPending(uint x, uint y, uint epochLength_, uint[2] memory sig) public {
+  function openPending(uint x, uint y, uint epochLength_, uint nonce, uint[2] memory sig) public {
     require(!pendingOpened[x][y], "pending already opened");
+    uint localNonce = pendingFunNonce[x][y];
+    require(nonce == localNonce, "invalid nonce");
     // verify sig.
-    uint hash = uint(keccak256(abi.encodePacked(x, y, epochLength_))).mod();
+    uint hash = uint(keccak256(abi.encodePacked(x, y, epochLength_, nonce))).mod();
     require(verifySig(hash, x, y, sig[0], sig[1]), "verify open pending sig failed");
 
     // epoch length can't below 5.
@@ -151,17 +156,21 @@ contract PGC {
 
     epochLength[x][y] = epochLength_;
     pendingOpened[x][y] = true;
+    pendingFunNonce[x][y] = localNonce.add(1);
   }
 
   // pgc account close the capacity of pending state.
-  function closePending(uint x, uint y, uint[2] memory sig) public {
+  function closePending(uint x, uint y, uint nonce, uint[2] memory sig) public {
     require(pendingOpened[x][y], "pending already closed");
+    uint localNonce = pendingFunNonce[x][y];
+    require(nonce == localNonce, "invalid nonce");
     // verify sig.
-    uint hash = uint(keccak256(abi.encodePacked(x, y))).mod();
+    uint hash = uint(keccak256(abi.encodePacked(x, y, nonce))).mod();
     require(verifySig(hash, x, y, sig[0], sig[1]), "verify close pending sig failed");
 
     epochLength[x][y] = 0;
     pendingOpened[x][y] = false;
+    pendingFunNonce[x][y] = localNonce.add(1);
   }
 
   /*
@@ -292,6 +301,10 @@ contract PGC {
     ct[3] = userBalance.Y.Y;
     nonce = userBalance.nonce;
     return (ct, nonce);
+  }
+
+  function getPendingFunNonce(uint x, uint y) public view returns(uint) {
+    return pendingFunNonce[x][y];
   }
 
   /*

@@ -57,3 +57,12 @@ func TestG1Point(t *testing.T) {
 		t.Error("curve p error")
 	}
 }
+
+func BenchmarkMult(b *testing.B) {
+	r := fromString("11888242871839275222246405745257275088548364400416034343698204186575808495617")
+	c := BN128{}
+
+	for i := 0; i < b.N; i++ {
+		c.ScalarBaseMult(r.Bytes())
+	}
+}

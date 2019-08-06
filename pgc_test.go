@@ -222,11 +222,14 @@ func testPGCPending(sender *bind.TransactOpts, rpcClient *Client, client *ethcli
 	bob := CreateTestAccount("bob", bobInitBalance)
 	// bob open pending capacity.
 	bobEpoch := new(big.Int).SetUint64(50)
-	bobOpenPendingHash, err := HashOpenPending(bob.sk.PublicKey.X, bob.sk.PublicKey.Y, bobEpoch)
+	pendingFunNonce := new(big.Int).SetUint64(0)
+	bobOpenPendingHash, err := HashOpenPending(bob.sk.PublicKey.X, bob.sk.PublicKey.Y, bobEpoch, pendingFunNonce)
 	require.Nil(t, err, "hash open pending failed")
 	bobOpenPendingSig, err := Sign(bob.sk, bobOpenPendingHash)
 	require.Nil(t, err, "sig for open pending failed")
-	openPendingTx, err := cs.PGC.OpenPending(sender, bob.sk.PublicKey.X, bob.sk.PublicKey.Y, bobEpoch, bobOpenPendingSig.ToInputs())
+
+	openPendingTx, err := cs.PGC.OpenPending(sender, bob.sk.PublicKey.X, bob.sk.PublicKey.Y, bobEpoch, pendingFunNonce, bobOpenPendingSig.ToInputs())
+	pendingFunNonce.Add(pendingFunNonce, one)
 	require.Nil(t, err, "open pending tx failed")
 	t.Log("open pending tx", openPendingTx.Hash().Hex())
 	waitFor(openPendingTx.Hash(), client)
@@ -264,10 +267,12 @@ func testPGCPending(sender *bind.TransactOpts, rpcClient *Client, client *ethcli
 
 	// alice open pending capacity.
 	aliceEpoch := new(big.Int).SetUint64(50)
-	aliceOpenPendingHash, _ := HashOpenPending(alice.sk.PublicKey.X, alice.sk.PublicKey.Y, aliceEpoch)
+	alicePendingFunNonce := new(big.Int).SetUint64(0)
+	aliceOpenPendingHash, _ := HashOpenPending(alice.sk.PublicKey.X, alice.sk.PublicKey.Y, aliceEpoch, alicePendingFunNonce)
 	aliceOpenPendingSig, _ := Sign(alice.sk, aliceOpenPendingHash)
-	aliceOpenPendingTx, err := cs.PGC.OpenPending(sender, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, aliceEpoch, aliceOpenPendingSig.ToInputs())
+	aliceOpenPendingTx, err := cs.PGC.OpenPending(sender, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, aliceEpoch, alicePendingFunNonce, aliceOpenPendingSig.ToInputs())
 	require.Nil(t, err, "alice open pending capacity tx failed")
+	alicePendingFunNonce.Add(alicePendingFunNonce, one)
 	t.Log("open pending tx", aliceOpenPendingTx.Hash().Hex())
 	waitFor(aliceOpenPendingTx.Hash(), client)
 	sender.Nonce.Add(sender.Nonce, one)
@@ -299,9 +304,10 @@ func testPGCPending(sender *bind.TransactOpts, rpcClient *Client, client *ethcli
 	require.Equal(t, aliceExpectBalance.Bytes(), aliceBalanceAfter, "alice's balance not correct after transfer")
 
 	// alice close pending capacity.
-	closePendingHash, _ := HashClosePending(alice.sk.PublicKey.X, alice.sk.PublicKey.Y)
+	closePendingHash, _ := HashClosePending(alice.sk.PublicKey.X, alice.sk.PublicKey.Y, alicePendingFunNonce)
 	closePendingSig, _ := Sign(alice.sk, closePendingHash)
-	closePendingTx, err := cs.PGC.ClosePending(sender, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, closePendingSig.ToInputs())
+	closePendingTx, err := cs.PGC.ClosePending(sender, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, alicePendingFunNonce, closePendingSig.ToInputs())
+	alicePendingFunNonce.Add(alicePendingFunNonce, one)
 	require.Nil(t, err, "alice close pending failed")
 	t.Log("alice close pending tx", closePendingTx.Hash().Hex())
 	waitFor(closePendingTx.Hash(), client)
