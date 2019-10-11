@@ -6,12 +6,13 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/rpc"
 	"io/ioutil"
 	"math/big"
 	"net/http"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 // Client represents rpc client.
@@ -75,6 +76,16 @@ func (c *Client) Mine(n int) error {
 // Only available in ganache-cli.
 func (c *Client) EVMMine() error {
 	return c.client.Call(nil, "evm_mine")
+}
+
+// SendFromLocalAccout sends eth to someone from test local account get by rpc.
+func (c *Client) SendFromLocalAccout(to common.Address, amount *big.Int) (common.Hash, error) {
+	accounts, err := c.GetAccounts()
+	if err != nil {
+		return common.Hash{}, nil
+	}
+
+	return c.SendETH(accounts[0], to, amount)
 }
 
 // SendETH send ether to one.

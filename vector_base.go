@@ -9,6 +9,13 @@ import (
 type VectorBase struct {
 	gv, hv  *GeneratorVector
 	g, h, u *ECPoint
+
+	// bit size of pgc system, also the default lenght of a g/h vector.
+	bitSize int
+	// aggreate proof size, number of g/h vector should be aggreateSize*bitSize.
+	aggreateSize int
+
+	fakeTest bool
 }
 
 // NewVecotrBase creates new instance.
@@ -23,29 +30,37 @@ func NewVecotrBase(gv, hv *GeneratorVector, g, h *ECPoint) *VectorBase {
 }
 
 // NewRandomVectorBase creates random vector base.
-func NewRandomVectorBase(curve elliptic.Curve, size int) *VectorBase {
+func NewRandomVectorBase(curve elliptic.Curve, bitSize, aggreateSize int) *VectorBase {
 	vb := VectorBase{}
-	vb.gv = NewRandomGeneratorVector(curve, size)
-	vb.hv = NewRandomGeneratorVector(curve, size)
+	vb.gv = NewRandomGeneratorVector(curve, bitSize*aggreateSize)
+	vb.hv = NewRandomGeneratorVector(curve, bitSize*aggreateSize)
 	vb.h = NewRandomECPoint(curve)
 	vb.g = NewRandomECPoint(curve)
 	vb.u = NewRandomECPoint(curve)
+
+	vb.bitSize = bitSize
+	vb.aggreateSize = aggreateSize
 
 	return &vb
 }
 
 // NewDefaultVectorBase creates default vector base.
-func NewDefaultVectorBase(curve elliptic.Curve, size int) *VectorBase {
+func NewDefaultVectorBase(curve elliptic.Curve, bitSize, aggreateSize int) *VectorBase {
 	vb := VectorBase{}
-	vb.gv = NewDefaultGV(curve, size)
-	vb.hv = NewDefaultHV(curve, size)
+	vb.gv = NewDefaultGV(curve, bitSize*aggreateSize)
+	vb.hv = NewDefaultHV(curve, bitSize*aggreateSize)
 	g := "g generator of twisted elg"
 	vb.g = NewECPointByString(g, curve)
 
 	h := "h generator of twisted elg"
 	vb.h = NewECPointByString(h, curve)
 
+	// u := "u generator of innerproduct"
+	// vb.u = NewECPointByString(u, curve)
 	vb.u = vb.g.Copy()
+
+	vb.bitSize = bitSize
+	vb.aggreateSize = aggreateSize
 
 	return &vb
 }
@@ -75,6 +90,16 @@ func (vb *VectorBase) GetGV() *GeneratorVector {
 	return vb.gv
 }
 
+// GetBitSize returns bitsize.
+func (vb *VectorBase) GetBitSize() int {
+	return vb.bitSize
+}
+
+// GetAggreateSize returns size of aggreated proof.
+func (vb *VectorBase) GetAggreateSize() int {
+	return vb.aggreateSize
+}
+
 // GetVectorSize returns size of underlying g, h vector.
 func (vb *VectorBase) GetVectorSize() int {
 	return vb.gv.Size()
@@ -98,4 +123,9 @@ func (vb *VectorBase) CommitTwoVector(al, ar []*big.Int, alpha *big.Int) *ECPoin
 	commit.Add(commit, hAlpha)
 
 	return commit
+}
+
+// FakeTest .
+func (vb *VectorBase) FakeTest() bool {
+	return vb.fakeTest
 }

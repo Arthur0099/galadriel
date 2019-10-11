@@ -12,9 +12,6 @@ import (
 	log "github.com/inconshreveable/log15"
 )
 
-var one = new(big.Int).SetUint64(1)
-var two = new(big.Int).SetUint64(2)
-
 // CTEncPoint respresents encrypted ct tx point on curve.
 type CTEncPoint struct {
 	// X=pk*r; Y=g*r + h*v.(r is randomness, v is the msg)
@@ -53,6 +50,32 @@ type PrivateKey struct {
 	D *big.Int
 
 	PublicKey
+}
+
+// MRTwistedELGamalCTPub represent public points in MRTwistedELGamalCT tx.
+type MRTwistedELGamalCTPub struct {
+	// X1=pk1*r; X2=pk2*r.
+	X1, X2 *ECPoint
+	// Y = g*r + h*m.
+	Y *ECPoint
+}
+
+func (mrp *MRTwistedELGamalCTPub) First() *CTEncPoint {
+	return &CTEncPoint{
+		X: mrp.X1,
+		Y: mrp.Y,
+	}
+}
+
+// MRTwistedELGamalCT defines the structure of 2R1M ciphertext (MR denotes multiple recipients).
+type MRTwistedELGamalCT struct {
+	MRTwistedELGamalCTPub
+	R      *big.Int
+	EncMsg []byte
+}
+
+func (mr *MRTwistedELGamalCT) Pub() *MRTwistedELGamalCTPub {
+	return &mr.MRTwistedELGamalCTPub
 }
 
 // TwistedELGamalCT respresents a encrypted transaction encoded in twisted-elgamal format.
@@ -118,7 +141,20 @@ func randFieldElement(c elliptic.Curve, rand io.Reader) (k *big.Int, err error) 
 	return
 }
 
-// GenerateKey generates key pair using btcec s256 curve.
+// MustGenerateKey generates a key pair and panic if err.
+// Warn: test purpose only.
+func MustGenerateKey() *ecdsa.PrivateKey {
+	key, err := GenerateKey()
+	if err != nil {
+		panic(err)
+	}
+
+	return key
+}
+
+// GenerateKey generates key pair.
+// Warn: The h point from global params is used for generating key pair, not original
+// g base point from curve.
 func GenerateKey() (priv *ecdsa.PrivateKey, err error) {
 	params := Params()
 	curve := params.Curve()
@@ -197,11 +233,54 @@ func EncryptOnChain(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) 
 
 }
 
-// Encrypt encrypts msg in twisted elgamal way.
+// EncryptTransfer encrypts msg by two different pk but with same random.
+func EncryptTransfer(sender, receiver *ecdsa.PublicKey, msg []byte) (*MRTwistedELGamalCT, error) {
+	curve := sender.Curve
+	// get random.
+	r, err := rand.Int(rand.Reader, curve.Params().N)
+	if err != nil {
+		return nil, err
+	}
+	twSender, err := EncryptWithRandom(sender, msg, r)
+	if err != nil {
+		return nil, err
+	}
+	twReceiver, err := EncryptWithRandom(receiver, msg, r)
+	if err != nil {
+		return nil, err
+	}
+
+	if !twReceiver.Y.Equal(twSender.Y) {
+		return nil, errors.New("twisted elgamal y point not equal")
+	}
+
+	return &MRTwistedELGamalCT{
+		MRTwistedELGamalCTPub: MRTwistedELGamalCTPub{
+			X1: twSender.X,
+			X2: twReceiver.X,
+			Y:  twSender.Y,
+		},
+		R:      r,
+		EncMsg: msg,
+	}, nil
+}
+
+// Encrypt encrypts msg.
 func Encrypt(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
+	curve := pk.Curve
+	// get random.
+	r, err := rand.Int(rand.Reader, curve.Params().N)
+	if err != nil {
+		return nil, err
+	}
+
+	return EncryptWithRandom(pk, msg, r)
+}
+
+// EncryptWithRandom encrypts msg in twisted elgamal way.
+func EncryptWithRandom(pk *ecdsa.PublicKey, msg []byte, r *big.Int) (*TwistedELGamalCT, error) {
 	params := Params()
 	msgBit := new(big.Int).SetBytes(msg)
-	log.Debug("msg", "v", msgBit, "string(b)", string(msg))
 
 	if msgBit.BitLen() > params.BitSizeLimit() {
 		return nil, errors.New("msg reach size limit")
@@ -215,11 +294,6 @@ func Encrypt(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
 	// set curve
 	curve := pk.Curve
 
-	// get random.
-	r, err := rand.Int(rand.Reader, curve.Params().N)
-	if err != nil {
-		return nil, err
-	}
 	// for sigma proof purpose.
 	ct.R = new(big.Int).Set(r)
 	ct.EncMsg = make([]byte, len(msg))
@@ -232,7 +306,6 @@ func Encrypt(pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
 	// compute g * m.(g ^ m)
 	g := params.GetG()
 	ct.Y.ScalarMult(g, msgBit)
-	log.Debug("encrypt msg(g^m)", "x", ct.Y.X, "y", ct.Y.Y)
 	// compute h * r.(h ^ r)
 	h := params.GetH()
 	s2X, s2Y := curve.ScalarMult(h.X, h.Y, r.Bytes())
@@ -258,7 +331,6 @@ func getEncryptedMsg(sk *ecdsa.PrivateKey, ct *CTEncPoint) *ECPoint {
 	// use ct.Y - ct.X Point to get encoded msg.
 	// get Affine negation formulas of ct.Y.
 	encodedMsg := ct.Y.Sub(ct.Y, ct.X)
-	log.Debug("decrypt msg(g^m)", "x", encodedMsg.X, "y", encodedMsg.Y)
 
 	return encodedMsg
 }
@@ -271,9 +343,10 @@ func decryptEncodedMsg(encodeMsg *ECPoint) []byte {
 	upperLimit := new(big.Int).Exp(two, new(big.Int).SetUint64(bit), nil)
 	g := params.GetG()
 
+	// todo: uint64 may not enough if bit size bigger than 64.
 	for i := uint64(0); i < upperLimit.Uint64(); i++ {
 		point := new(ECPoint).ScalarMult(g, new(big.Int).SetUint64(i))
-		if point.Equals(encodeMsg) {
+		if point.Equal(encodeMsg) {
 			return new(big.Int).SetUint64(i).Bytes()
 		}
 	}
@@ -310,7 +383,6 @@ func Refresh(sk *ecdsa.PrivateKey, ct *CTEncPoint) (*TwistedELGamalCT, error) {
 
 	// set g * m.(g ^ m)
 	refreshCT.Y = encodedMsg.Copy()
-	log.Debug("refresh encoded msg", "x", refreshCT.Y.X, "y", refreshCT.Y.Y)
 	// compute h * r.(h ^ r)
 	h := params.GetH()
 	s2X, s2Y := curve.ScalarMult(h.X, h.Y, r.Bytes())

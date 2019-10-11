@@ -141,8 +141,11 @@ func (gv *GeneratorVector) Commit(a []*big.Int) *ECPoint {
 	}
 
 	// compute res.
-	res := new(ECPoint).ScalarMult(gv.vector[0], a[0])
-	for i := 1; i < len(a); i++ {
+	res := NewEmptyECPoint(gv.Curve)
+	for i := 0; i < len(a); i++ {
+		if a[i].Uint64() == 0 {
+			continue
+		}
 		tmpP := new(ECPoint).ScalarMult(gv.vector[i], a[i])
 		res.Add(res, tmpP)
 	}

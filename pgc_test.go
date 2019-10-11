@@ -3,14 +3,15 @@ package pgc
 import (
 	"crypto/elliptic"
 	"encoding/json"
+	"math/big"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/pgc/contracts"
 	"github.com/stretchr/testify/require"
-	"math/big"
-	"testing"
 )
 
 var ether = new(big.Int).SetUint64(1000 * 1000 * 1000 * 1000 * 1000 * 1000)
@@ -364,7 +365,6 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 			sender.Nonce.Add(sender.Nonce, one)
 
 		}
-
 	}
 
 	// generate alice, bob account.

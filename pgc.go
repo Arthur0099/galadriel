@@ -91,7 +91,6 @@ func (ctx *CTX) MarshalJSON() ([]byte, error) {
 // CreateCTX creates en encrypt tx for transfering v balance from
 // alice account to bob account.
 func CreateCTX(alice *Account, bob *ecdsa.PublicKey, v *big.Int) (*CTX, error) {
-	log.Debug("create ctx")
 	params := Params()
 
 	ctx := CTX{}
@@ -121,7 +120,7 @@ func CreateCTX(alice *Account, bob *ecdsa.PublicKey, v *big.Int) (*CTX, error) {
 
 	// updated balance of alice.
 	updatedBalance := new(CTEncPoint).Sub(alice.balance, c1.CopyPublicPoint())
-	log.Debug("alice' updated balance", "x.x", updatedBalance.X.X, "x.y", updatedBalance.X.Y, "y.x", updatedBalance.Y.X, "y.y", updatedBalance.Y.Y)
+
 	refreshUpdatedBalance, err := Refresh(alice.sk, updatedBalance)
 
 	if err != nil {
@@ -146,8 +145,8 @@ func CreateCTX(alice *Account, bob *ecdsa.PublicKey, v *big.Int) (*CTX, error) {
 
 	// update info.
 	// update alice balance and bob balance
-	alice.balance = updatedBalance.Copy()
-	alice.nonce = alice.nonce + 1
+	// alice.balance = updatedBalance.Copy()
+	// alice.nonce = alice.nonce + 1
 
 	return &ctx, nil
 }

@@ -3,7 +3,6 @@ package pgc
 import (
 	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"math/big"
 
 	log "github.com/inconshreveable/log15"
@@ -121,9 +120,11 @@ func GenerateRangeProof(vb *VectorBase, v, random *big.Int) (*RangeProof, error)
 	tmpField2 = tmpField2.Hadamard(yn)
 	tmpField2 = tmpField2.AddFieldVector(n2.Times(zSquare))
 	t1.Add(t1, sl.InnerProduct(tmpField2))
+	t1.Mod(t1, n)
 
 	// t2 = <sl, sr hadamard y^n>
 	t2 := sl.InnerProduct(sryn)
+	t2.Mod(t2, n)
 
 	// commit to t1, t2.
 	// pick two random number.
@@ -157,20 +158,21 @@ func GenerateRangeProof(vb *VectorBase, v, random *big.Int) (*RangeProof, error)
 	// r = y^n hadamard (ar + z*1^n) + z^2 * 2^n + y^n hadamard sr*x.
 	r := tmpField2.AddFieldVector(yn.Hadamard(sr.Times(x)))
 	t := l.InnerProduct(r)
+	t.Mod(t, n)
 
-	tt := new(big.Int).Set(t0)
-	tt1 := new(big.Int).Mul(t1, x)
-	tt1.Mod(tt1, n)
-	tt2 := new(big.Int).Mul(t2, x2)
-	tt2.Mod(tt2, n)
-	tt.Add(tt, tt1)
-	tt.Mod(tt, n)
-	tt.Add(tt, tt2)
-	tt.Mod(tt, n)
-	// This is just for check.
-	if t.Cmp(tt) != 0 {
-		return nil, errors.New("t0 + t1*x + t2*x^2 != <l,r>")
-	}
+	// tt := new(big.Int).Set(t0)
+	// tt1 := new(big.Int).Mul(t1, x)
+	// tt1.Mod(tt1, n)
+	// tt2 := new(big.Int).Mul(t2, x2)
+	// tt2.Mod(tt2, n)
+	// tt.Add(tt, tt1)
+	// tt.Mod(tt, n)
+	// tt.Add(tt, tt2)
+	// tt.Mod(tt, n)
+	// // This is just for check.
+	// if t.Cmp(tt) != 0 {
+	// 	return nil, errors.New("t0 + t1*x + t2*x^2 != <l,r>")
+	// }
 
 	// compute r2 * x^2 + r1 * x + z^2 * random.
 	bindingX := new(big.Int).Mul(zSquare, random)
@@ -189,18 +191,25 @@ func GenerateRangeProof(vb *VectorBase, v, random *big.Int) (*RangeProof, error)
 	// compute new h generator vector; h' = h * (y ^ -n).
 	hPrime := vb.GetHV().Hadamard(yn.ModInverse().GetVector())
 	// compute p point. p = A + S + g*-z + h'*(z*y^n + z^2 * 2^n).
-	p := commitA.Copy()
-	p.Add(p, new(ECPoint).ScalarMult(commitB, x))
-	p.Add(p, new(ECPoint).ScalarMult(vb.GetGV().Sum(), zNeg))
-	tmpExp := yn.Times(z).AddFieldVector(n2.Times(zSquare))
-	p.Add(p, hPrime.Commit(tmpExp.GetVector()))
+	// p := commitA.Copy()
+	// p.Add(p, new(ECPoint).ScalarMult(commitB, x))
+	// p.Add(p, new(ECPoint).ScalarMult(vb.GetGV().Sum(), zNeg))
+	// tmpExp := yn.Times(z).AddFieldVector(n2.Times(zSquare))
+	// p.Add(p, hPrime.Commit(tmpExp.GetVector()))
 
-	// compute p'. p' = p - h*u. == g*l + h'*r.(this could be apply on inner product).
-	newP := p.Sub(p, new(ECPoint).ScalarMult(vb.GetH(), u))
+	// // compute p'. p' = p - h*u. == g*l + h'*r.(this could be apply on inner product).
+	// newP := p.Sub(p, new(ECPoint).ScalarMult(vb.GetH(), u))
+	// just for check p' == g*l + h'*r.
+	actual := vb.GetGV().Commit(l.GetVector())
+	tmphr := hPrime.Commit(r.GetVector())
+	actual.Add(actual, tmphr)
+	// if !newP.Equal(actual) {
+	// 	return nil, errors.New("newp not equal g*l+h'*r")
+	// }
 
 	ipProver := IPProver{}
 	ipProver.U = vb.GetU()
-	ipProof, err := ipProver.GenerateIPProof(vb.GetGV(), hPrime, newP, t, l, r)
+	ipProof, err := ipProver.GenerateIPProof(vb.GetGV(), hPrime, actual, t, l, r)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +270,7 @@ func VerifyRangeProof(vb *VectorBase, v *ECPoint, proof *RangeProof) bool {
 	expect.Add(expect, new(ECPoint).ScalarMult(g, dleta))
 	actual := new(ECPoint).ScalarMult(g, proof.t)
 	actual.Add(actual, new(ECPoint).ScalarMult(h, proof.tx))
-	if !expect.Equals(actual) {
+	if !expect.Equal(actual) {
 		log.Warn("point not equal", "expect x", expect.X, "expect y", expect.Y, "actual x", actual.X, "actual y", actual.Y)
 		return false
 	}

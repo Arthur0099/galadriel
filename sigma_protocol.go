@@ -199,7 +199,7 @@ func checkSigmaStep1(pk, A, X *ECPoint, z, e *big.Int) bool {
 	// compute pk * z.
 	expect := new(ECPoint).ScalarMult(pk, z)
 
-	if !expect.Equals(actual) {
+	if !expect.Equal(actual) {
 		log.Warn("pk * z != A + X * e", "expect x", expect.X, "expect y", expect.Y, "actual x", actual.X, "actual y", actual.Y)
 		return false
 	}
@@ -216,7 +216,7 @@ func checkSigmaStep2(g, h, B, Y *ECPoint, za, zb, e *big.Int) bool {
 	// compute B + Y * e.
 	ye := new(ECPoint).ScalarMult(Y, e)
 	expect := new(ECPoint).Add(ye, B)
-	if !expect.Equals(actual) {
+	if !expect.Equal(actual) {
 		log.Warn("g * z + h * z' != B + Y * e", "expect x", expect.X, "expect y", expect.Y, "actual x", actual.X, "actual y", actual.Y)
 		return false
 	}
@@ -360,7 +360,7 @@ func checkDLESigmaProof(g, A, H *ECPoint, z, e *big.Int) bool {
 	he := new(ECPoint).ScalarMult(H, e)
 	expect := new(ECPoint).Add(A, he)
 
-	if !expect.Equals(gz) {
+	if !expect.Equal(gz) {
 		log.Warn("g * z != A + h * e", "expect x", expect.X, "expect y", expect.Y, "actual x", gz.X, "actual y", gz.Y)
 		return false
 	}

@@ -8,7 +8,7 @@ import (
 
 const (
 	ropstenInfura = "https://ropsten.infura.io/v3/10d08c76bb104f6286f774ec21fa7ac9"
-	local         = "http://192.168.1.115:8545"
+	local         = "http://127.0.0.1:8545"
 )
 
 // GetRopstenInfura returns infura client on main net.

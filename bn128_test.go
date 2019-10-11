@@ -66,3 +66,29 @@ func BenchmarkMult(b *testing.B) {
 		c.ScalarBaseMult(r.Bytes())
 	}
 }
+
+func TestBaseFun(t *testing.T) {
+	r := new(big.Int).SetUint64(0)
+	c := BN128{}
+	c.ScalarBaseMult(r.Bytes())
+}
+
+func BenchmarkMultS(b *testing.B) {
+	c := S256()
+	n := c.Params().N
+
+	for i := 0; i < b.N; i++ {
+		r, _ := rand.Int(rand.Reader, n)
+		c.ScalarBaseMult(r.Bytes())
+	}
+}
+
+func BenchmarkMultSNoCGO(b *testing.B) {
+	c := NoCGOS256()
+	n := c.Params().N
+
+	for i := 0; i < b.N; i++ {
+		r, _ := rand.Int(rand.Reader, n)
+		c.ScalarBaseMult(r.Bytes())
+	}
+}

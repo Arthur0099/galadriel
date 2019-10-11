@@ -2,12 +2,16 @@ package pgc
 
 import (
 	"context"
+	"math/big"
+	"strings"
+	"time"
+
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/pgc/contracts"
-	"math/big"
-	"time"
 
 	log "github.com/inconshreveable/log15"
 )
@@ -24,11 +28,68 @@ type Contracts struct {
 	TokenConverter   *contracts.Tokenconverter
 }
 
+func MustDeployContract(name string, auth *bind.TransactOpts, client *ethclient.Client, params ...interface{}) (
+	addr common.Address,
+	tx *types.Transaction,
+	contract interface{},
+) {
+
+	var ABI, BIN string
+
+	switch name {
+	case "publicParams":
+		ABI = contracts.PublicparamsABI
+		BIN = contracts.PublicparamsBin
+	case "sigmaVerifier":
+		ABI = contracts.SigmaverifierABI
+		BIN = contracts.SigmaverifierBin
+	case "dleSigmaVerifier":
+		ABI = contracts.DlesigmaverifierABI
+		BIN = contracts.DlesigmaverifierBin
+	case "ipVerifier":
+		ABI = contracts.IpverifierABI
+		BIN = contracts.IpverifierBin
+	case "rangeProofVerifier":
+		ABI = contracts.RangeproofverifierABI
+		BIN = contracts.RangeproofverifierBin
+	case "tokenConverter":
+		ABI = contracts.TokenconverterABI
+		BIN = contracts.TokenconverterBin
+	case "pgcVerifier":
+		ABI = contracts.PgcverifierABI
+		BIN = contracts.PgcverifierBin
+	case "pgc":
+		ABI = contracts.PgcABI
+		BIN = contracts.PgcBin
+	default:
+		panic("contract not support")
+	}
+
+	parsed, err := abi.JSON(strings.NewReader(ABI))
+	if err != nil {
+		panic(err)
+	}
+
+	// log info.
+	if len(params) == 0 {
+		addr, tx, contract, err = bind.DeployContract(auth, parsed, common.FromHex(BIN), client)
+	} else {
+		addr, tx, contract, err = bind.DeployContract(auth, parsed, common.FromHex(BIN), client, params...)
+	}
+	if err != nil {
+		panic(err)
+	}
+	auth.Nonce.Add(auth.Nonce, one)
+
+	log.Debug("deploy contract success", "name", name, "address", addr, "tx", tx.Hash().Hex())
+	return
+}
+
 func waitFor(tx common.Hash, client *ethclient.Client) {
 	for {
 		status, err := client.TransactionReceipt(context.Background(), tx)
 		if err != nil || status.Status != 1 {
-			time.Sleep(time.Second * 5)
+			time.Sleep(time.Second * 1)
 			continue
 		}
 
@@ -109,84 +170,36 @@ func DeployPGCContracts(auth *bind.TransactOpts, client *ethclient.Client) *Cont
 	}
 
 	// deploy public params contract.
-	ppAddress, ppTx, pp, err := contracts.DeployPublicparams(auth, client)
-	if err != nil {
-		panic(err)
-	}
-	log.Debug("deploy public params", "address", ppAddress.Hex(), "tx", ppTx.Hash().Hex())
-	auth.Nonce.Add(auth.Nonce, one)
-	c.PublicParams = pp
-	waitFor(ppTx.Hash(), client)
+	params, _, _ := MustDeployContract("publicParams", auth, client)
+	c.PublicParams, _ = contracts.NewPublicparams(params, client)
 
 	// deploy sigma contract.
-	sigmaAddress, sigmaTx, sigma, err := contracts.DeploySigmaverifier(auth, client, ppAddress)
-	if err != nil {
-		panic(err)
-	}
-	log.Debug("deploy sigma verifier", "address", sigmaAddress.Hex(), "tx", sigmaTx.Hash().Hex())
-	auth.Nonce.Add(auth.Nonce, one)
-	c.SigmaVerifier = sigma
-	waitFor(sigmaTx.Hash(), client)
+	sigmaVerifier, _, _ := MustDeployContract("sigmaVerifier", auth, client, params)
+	c.SigmaVerifier, _ = contracts.NewSigmaverifier(sigmaVerifier, client)
 
 	// deploy dle sigma contract.
-	dleSigmaAddress, dleSigmaTx, dleSigma, err := contracts.DeployDlesigmaverifier(auth, client)
-	if err != nil {
-		panic(err)
-	}
-	log.Debug("deploy dle sigma", "address", dleSigmaAddress.Hex(), "tx", dleSigmaTx.Hash().Hex())
-	auth.Nonce.Add(auth.Nonce, one)
-	c.DLESigmaVerifier = dleSigma
-	waitFor(dleSigmaTx.Hash(), client)
+	dleSigmaVerifier, _, _ := MustDeployContract("dleSigmaVerifier", auth, client)
+	c.DLESigmaVerifier, _ = contracts.NewDlesigmaverifier(dleSigmaVerifier, client)
 
 	// deploy ip contract.
-	ipAddress, ipTx, ip, err := contracts.DeployIpverifier(auth, client, ppAddress)
-	if err != nil {
-		panic(err)
-	}
-	log.Debug("deploy ip verifier", "address", ipAddress.Hex(), "tx", ipTx.Hash().Hex())
-	auth.Nonce.Add(auth.Nonce, one)
-	c.IPVerifier = ip
-	waitFor(ipTx.Hash(), client)
+	ipVerifier, _, _ := MustDeployContract("ipVerifier", auth, client, params)
+	c.IPVerifier, _ = contracts.NewIpverifier(ipVerifier, client)
 
 	// deploy range proof verifier
-	rangeAddress, rangeTx, rangeVerifier, err := contracts.DeployRangeproofverifier(auth, client, ppAddress, ipAddress)
-	if err != nil {
-		panic(err)
-	}
-	log.Debug("deploy range verifier", "address", rangeAddress.Hex(), "tx", rangeTx.Hash().Hex())
-	auth.Nonce.Add(auth.Nonce, one)
-	c.RangeVerifier = rangeVerifier
-	waitFor(rangeTx.Hash(), client)
+	rangeVerifier, _, _ := MustDeployContract("rangeProofVerifier", auth, client, params, ipVerifier)
+	c.RangeVerifier, _ = contracts.NewRangeproofverifier(rangeVerifier, client)
 
 	// deploy token convert contract.
-	tokenConvertAddress, tokenConvertTx, tokenConverter, err := contracts.DeployTokenconverter(auth, client)
-	if err != nil {
-		panic(err)
-	}
-	log.Debug("deploy token converter", "address", tokenConvertAddress, "tx", tokenConvertTx.Hash())
-	c.TokenConverter = tokenConverter
-	auth.Nonce.Add(auth.Nonce, one)
-	waitFor(tokenConvertTx.Hash(), client)
+	tokenConverter, _, _ := MustDeployContract("tokenConverter", auth, client)
+	c.TokenConverter, _ = contracts.NewTokenconverter(tokenConverter, client)
 
 	// deploy pgc verifyer.
-	pgcVerifierAddr, pgcVerifierTx, _, err := contracts.DeployPgcverifier(auth, client, ppAddress, dleSigmaAddress, rangeAddress, sigmaAddress)
-	if err != nil {
-		panic(err)
-	}
-	log.Debug("deploy pgcverifier", "address", pgcVerifierAddr, "tx", pgcVerifierTx.Hash())
-	auth.Nonce.Add(auth.Nonce, one)
-	waitFor(pgcVerifierTx.Hash(), client)
+	pgcVerifier, _, _ := MustDeployContract("pgcVerifier", auth, client, params, dleSigmaVerifier, rangeVerifier, sigmaVerifier)
 
 	// deploy pgc contract
-	pgcAddress, pgcTx, pgcC, err := contracts.DeployPgc(auth, client, ppAddress, pgcVerifierAddr, tokenConvertAddress)
-	if err != nil {
-		panic(err)
-	}
-	log.Debug("deploy pgc", "address", pgcAddress, "tx", pgcTx.Hash().Hex())
-	auth.Nonce.Add(auth.Nonce, one)
-	c.PGC = pgcC
-	c.PGCAddress = pgcAddress
-	waitFor(pgcTx.Hash(), client)
+	pgcCon, _, _ := MustDeployContract("pgc", auth, client, params, pgcVerifier, tokenConverter)
+	c.PGC, _ = contracts.NewPgc(pgcCon, client)
+	c.PGCAddress = pgcCon
 
 	return &c
 }

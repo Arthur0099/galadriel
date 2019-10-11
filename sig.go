@@ -50,7 +50,9 @@ func VerifySig(pk *ecdsa.PublicKey, data []byte, sig *Sig) bool {
 
 	sig.S.ModInverse(sig.S, n)
 	u1 := new(big.Int).Mul(sig.S, new(big.Int).SetBytes(data))
+	u1.Mod(u1, n)
 	u2 := new(big.Int).Mul(sig.R, sig.S)
+	u2.Mod(u2, n)
 	A := new(ECPoint).ScalarMult(params.GetH(), u1)
 	tmp := new(ECPoint).ScalarMult(new(ECPoint).SetFromPublicKey(pk), u2)
 	A.Add(A, tmp)

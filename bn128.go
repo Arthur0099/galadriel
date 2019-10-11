@@ -37,8 +37,7 @@ func (bn128 *BN128) Params() *elliptic.CurveParams {
 func (bn128 *BN128) IsOnCurve(x, y *big.Int) bool {
 	// point to g1 will try to convert x,y to g1 point and
 	// will check it on curve or not.
-	_, err := PointToG1(x, y)
-	if err != nil {
+	if _, err := PointToG1(x, y); err != nil {
 		return false
 	}
 	return true

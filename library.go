@@ -9,6 +9,11 @@ import (
 
 // S256 returns curve used in btc.
 func S256() elliptic.Curve {
+	return crypto.S256()
+}
+
+// NoCGOS256 returns curve.
+func NoCGOS256() elliptic.Curve {
 	return btcec.S256()
 }
 

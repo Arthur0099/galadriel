@@ -46,3 +46,13 @@ func (a *Account) UpdateBalance(data CT) {
 func (a *Account) UpdateBalanceSn(m *big.Int) {
 	a.m.Set(m)
 }
+
+func (a *Account) Copy() *Account {
+	b := Account{}
+	b.balance = a.balance
+	b.m = a.m
+	b.name = a.name
+	b.nonce = a.nonce
+	b.sk = a.sk
+	return &b
+}

@@ -1,6 +1,7 @@
 package pgc
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -16,10 +17,25 @@ import (
 var (
 	// GWEI is the uint of gas price
 	GWEI         = new(big.Int).SetUint64(1000 * 1000 * 1000)
-	testGasLimit = uint64(7000000)
+	testGasLimit = uint64(8000000)
+	one          = new(big.Int).SetUint64(1)
+	two          = new(big.Int).SetUint64(2)
+	zero         = new(big.Int).SetUint64(0)
 )
 
 var parsed abi.ABI
+
+// ComputeChallengeByECPoints computes challenge like (ecpoint.X, ecpoint.Y, ...).
+func ComputeChallengeByECPoints(order *big.Int, points ...*ECPoint) (*big.Int, error) {
+	datas := make([]interface{}, 0)
+
+	for _, point := range points {
+		datas = append(datas, point.X)
+		datas = append(datas, point.Y)
+	}
+
+	return ComputeChallenge(order, datas...)
+}
 
 // ComputeChallenge computes challenge x using hash func(hash(pack(data))).
 // todo: same with Keccak256(a1, a2, b1, b2) in solidity.
@@ -111,9 +127,24 @@ func BitVector(v *big.Int, n int) ([]*big.Int, error) {
 	return bitVector, nil
 }
 
+// MultBitVector returns vector appending bitVector of vi.
+func MultBitVector(v []*big.Int, n int) ([]*big.Int, error) {
+	bitVector := make([]*big.Int, 0)
+	for i := 0; i < len(v); i++ {
+		tmp, err := BitVector(v[i], n)
+		if err != nil {
+			return nil, err
+		}
+
+		bitVector = append(bitVector, tmp...)
+	}
+
+	return bitVector, nil
+}
+
 // Delta represents (z - z^2) * <1^n, y^n> - z^3 * <1^n, 2^n>.
 func Delta(y, z, order *big.Int, n int) *big.Int {
-	zSquare := new(big.Int).Exp(z, new(big.Int).SetUint64(2), order)
+	zSquare := new(big.Int).Exp(z, two, order)
 	res := new(big.Int).Sub(z, zSquare)
 	res.Mod(res, order)
 
@@ -132,6 +163,31 @@ func Delta(y, z, order *big.Int, n int) *big.Int {
 	return res
 }
 
+// DeltaMN represents (z - z^2) * <1^mn, y^mn> - z^(j+1) * <1^n, 2^n>. (j is [1, m])
+func DeltaMN(y, z, order *big.Int, m, n int) *big.Int {
+	zSquare := new(big.Int).Exp(z, two, order)
+	res := new(big.Int).Sub(z, zSquare)
+	res.Mod(res, order)
+
+	ymn := PowVector(y, order, n*m)
+	res.Mul(res, ymn.Sum())
+	res.Mod(res, order)
+
+	n2Sum := PowVector(two, order, n).Sum()
+	tmp := new(big.Int)
+	for j := 1; j <= m; j++ {
+		zjtmp := new(big.Int).Exp(z, new(big.Int).SetUint64(uint64(j+2)), order)
+		zjtmp.Mul(zjtmp, n2Sum)
+		tmp.Add(tmp, zjtmp)
+	}
+	tmp.Mod(tmp, order)
+
+	res.Sub(res, tmp)
+	res.Mod(res, order)
+
+	return res
+}
+
 // LowerCaseFirst converts first character of string to lowercase.
 func LowerCaseFirst(data string) string {
 	// Do nothing with empty string.
@@ -142,6 +198,28 @@ func LowerCaseFirst(data string) string {
 	runeStr := []rune(data)
 	runeStr[0] = unicode.ToLower(runeStr[0])
 	return string(runeStr)
+}
+
+// MustGetRandomMsg returns a random msg less than 2^bitSize.
+// Warn: test purpose only.
+func MustGetRandomMsg(bitSize int) *big.Int {
+	n := new(big.Int).Exp(new(big.Int).SetUint64(2), new(big.Int).SetUint64(uint64(bitSize)), nil)
+	r, err := rand.Int(rand.Reader, n)
+	if err != nil {
+		panic(err)
+	}
+
+	return r
+}
+
+// MustGetRandom returns a r.
+func MustGetRandom(n *big.Int) *big.Int {
+	r, err := rand.Int(rand.Reader, n)
+	if err != nil {
+		panic(err)
+	}
+
+	return r
 }
 
 func init() {

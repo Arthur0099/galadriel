@@ -2,16 +2,15 @@ package pgc
 
 import (
 	"crypto/rand"
-	"encoding/json"
 	"math/big"
 	"testing"
 )
 
 func TestRangeProof(t *testing.T) {
-	v := new(big.Int).SetUint64(10)
+	v := MustGetRandomMsg(Params().BitSizeLimit())
+	v = new(big.Int).SetUint64(5)
 	params := Params()
 
-	// compute g * r + h * v
 	r, err := rand.Int(rand.Reader, params.Curve().Params().N)
 	if err != nil {
 		t.Error(err)
@@ -23,6 +22,7 @@ func TestRangeProof(t *testing.T) {
 	g := vb.GetG()
 
 	// commit point p.
+	// p = g*v + h*r.
 	p := new(ECPoint).ScalarMult(g, v)
 	p.Add(p, new(ECPoint).ScalarMult(h, r))
 
@@ -37,18 +37,16 @@ func TestRangeProof(t *testing.T) {
 		return
 	}
 
-	newJSON := struct {
-		Proof *RangeProof
-		P     *ECPoint
-	}{
-		Proof: proof,
-		P:     p,
-	}
+	// v = params.Max()
+	// v.Add(v, one)
+	// p = new(ECPoint).ScalarMult(g, v)
+	// p.Add(p, new(ECPoint).ScalarMult(h, r))
+	// proof, err = GenerateRangeProof(vb, v, r)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
 
-	data, err := json.Marshal(&newJSON)
-	if err != nil {
-		panic(err)
-	}
-	path := "solidity/proofs/rangeProof"
-	WriteToFile(data, path)
+	// if VerifyRangeProof(vb, p, proof) {
+	// 	t.Fatal("failed")
+	// }
 }

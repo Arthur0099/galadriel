@@ -66,8 +66,6 @@ func (ipProver *IPProver) GenerateIPProof(g, h *GeneratorVector, p *ECPoint, c *
 	if err != nil {
 		return nil, err
 	}
-	log.Debug("challenge", "xu", e)
-
 	// compute newPoint.
 	// p' = p + u * (e * c)
 	ue := new(ECPoint).ScalarMult(ipProver.U, e)
@@ -90,7 +88,6 @@ func (ipProver *IPProver) generateIPProof(g, h *GeneratorVector, u, p *ECPoint, 
 	}
 
 	// todo: make sure size is power of 2.
-
 	gLeft := g.HalfLeft()
 	gRight := g.HalfRight()
 	hLeft := h.HalfLeft()
@@ -244,7 +241,7 @@ func (ipVerifier *IPVerifier) verifyIPProof(g, h *GeneratorVector, u, p *ECPoint
 	want.Add(want, ga)
 	want.Add(want, hb)
 
-	if !p.Equals(want) {
+	if !p.Equal(want) {
 		log.Warn("Verifier p != p1", "want x", p.X, "want y", p.Y, "actual x", want.X, "actual y", want.Y)
 		return false
 	}

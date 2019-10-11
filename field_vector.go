@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+
+	log "github.com/inconshreveable/log15"
 )
 
 // FieldVector respresents vector scalar array.
@@ -15,14 +17,19 @@ type FieldVector struct {
 
 // NewFieldVector creates instance of field vector.
 func NewFieldVector(items []*big.Int, n *big.Int) *FieldVector {
-	f := FieldVector{}
-
-	// make sure item is under n.
-	f.items = make([]*big.Int, 0)
-	for _, item := range items {
-		f.items = append(f.items, new(big.Int).Mod(item, n))
+	newItmes := make([]*big.Int, len(items))
+	for i, item := range items {
+		newItmes[i] = new(big.Int).Set(item)
 	}
-	f.n = new(big.Int).Set(n)
+
+	return newFieldVector(newItmes, new(big.Int).Set(n))
+}
+
+// newFieldVector returns instance of field vector.
+func newFieldVector(items []*big.Int, n *big.Int) *FieldVector {
+	f := FieldVector{}
+	f.items = items
+	f.n = n
 
 	return &f
 }
@@ -101,7 +108,7 @@ func (f *FieldVector) SubFieldVector(start, end int) *FieldVector {
 		newItems = append(newItems, new(big.Int).Set(item))
 	}
 
-	return NewFieldVector(newItems, f.n)
+	return newFieldVector(newItems, new(big.Int).Set(f.n))
 }
 
 // First returns first item in field.
@@ -151,7 +158,7 @@ func (f *FieldVector) AllItemsSubOne() *FieldVector {
 		newItems = append(newItems, newItem)
 	}
 
-	return NewFieldVector(newItems, f.n)
+	return newFieldVector(newItems, new(big.Int).Set(f.n))
 }
 
 // ModInverse returns new field vector whose item = modInverse(ori item).
@@ -163,7 +170,7 @@ func (f *FieldVector) ModInverse() *FieldVector {
 		newItems = append(newItems, newItem)
 	}
 
-	return NewFieldVector(newItems, f.n)
+	return newFieldVector(newItems, new(big.Int).Set(f.n))
 }
 
 // Times compute item * x and returns new instance.
@@ -176,7 +183,25 @@ func (f *FieldVector) Times(x *big.Int) *FieldVector {
 		newItems = append(newItems, t)
 	}
 
-	return NewFieldVector(newItems, f.n)
+	return newFieldVector(newItems, new(big.Int).Set(f.n))
+}
+
+// Copy returns a copy of current.
+func (f *FieldVector) Copy() *FieldVector {
+	return NewFieldVector(f.items, f.n)
+}
+
+// Append appends another filed vector to current.
+func (f *FieldVector) Append(another *FieldVector) *FieldVector {
+	newItems := make([]*big.Int, 0)
+	for _, item := range f.items {
+		newItems = append(newItems, item)
+	}
+	for _, item := range another.GetVector() {
+		newItems = append(newItems, item)
+	}
+
+	return newFieldVector(newItems, new(big.Int).Set(f.n))
 }
 
 // AddFieldVector computes fi + otheri.
@@ -192,7 +217,7 @@ func (f *FieldVector) AddFieldVector(other *FieldVector) *FieldVector {
 		newItems = append(newItems, t)
 	}
 
-	return NewFieldVector(newItems, f.n)
+	return newFieldVector(newItems, new(big.Int).Set(f.n))
 }
 
 // Hadamard returns field vector (a1*b1, a2*b2, ..., an*bn).
@@ -208,7 +233,7 @@ func (f *FieldVector) Hadamard(other *FieldVector) *FieldVector {
 		newItems = append(newItems, t)
 	}
 
-	return NewFieldVector(newItems, f.n)
+	return newFieldVector(newItems, new(big.Int).Set(f.n))
 }
 
 // Sum returns a1 + a2 + .... + an.
@@ -221,4 +246,11 @@ func (f *FieldVector) Sum() *big.Int {
 	}
 
 	return res
+}
+
+// Log .
+func (f *FieldVector) Log() {
+	for _, item := range f.items {
+		log.Debug("vector", "v", item)
+	}
 }

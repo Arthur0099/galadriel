@@ -15,6 +15,13 @@ type ECPoint struct {
 	Curve elliptic.Curve
 }
 
+func (ec *ECPoint) checkNil() {
+	if ec.X == nil && ec.Y == nil {
+		ec.X = new(big.Int).SetUint64(0)
+		ec.Y = new(big.Int).SetUint64(0)
+	}
+}
+
 // MarshalJSON defines custom way to marshal json.
 func (ec *ECPoint) MarshalJSON() ([]byte, error) {
 	newJSON := struct {
@@ -69,14 +76,23 @@ func NewECPointByBytes(data []byte, curve elliptic.Curve) *ECPoint {
 func NewEmptyECPoint(curve elliptic.Curve) *ECPoint {
 	ec := ECPoint{}
 	ec.Curve = curve
-	ec.X = new(big.Int)
-	ec.Y = new(big.Int)
+	ec.X = new(big.Int).SetUint64(0)
+	ec.Y = new(big.Int).SetUint64(0)
 
 	return &ec
 }
 
 // Add adds two ec point and set ec to new points.
 func (ec *ECPoint) Add(first, second *ECPoint) *ECPoint {
+	ec.checkNil()
+	if first.X.Uint64() == 0 && first.Y.Uint64() == 0 {
+		ec.Apply(second)
+		return ec
+	}
+	if second.X.Uint64() == 0 && second.Y.Uint64() == 0 {
+		ec.Apply(first)
+		return ec
+	}
 	ec.X, ec.Y = first.Curve.Add(first.X, first.Y, second.X, second.Y)
 	ec.Curve = first.Curve
 
@@ -86,6 +102,7 @@ func (ec *ECPoint) Add(first, second *ECPoint) *ECPoint {
 // Sub returns/set res of first - second.
 // first/second unchanged.
 func (ec *ECPoint) Sub(first, second *ECPoint) *ECPoint {
+	ec.checkNil()
 	negation := new(ECPoint).Negation(second)
 	ec.X, ec.Y = first.Curve.Add(negation.X, negation.Y, first.X, first.Y)
 	ec.Curve = first.Curve
@@ -96,6 +113,7 @@ func (ec *ECPoint) Sub(first, second *ECPoint) *ECPoint {
 // Negation returns negation of other point.
 // set ec to -other.
 func (ec *ECPoint) Negation(other *ECPoint) *ECPoint {
+	ec.checkNil()
 	ec.Curve = other.Curve
 	ec.X = new(big.Int).Set(other.X)
 	ec.Y = new(big.Int).Neg(other.Y)
@@ -109,6 +127,7 @@ func (ec *ECPoint) Negation(other *ECPoint) *ECPoint {
 func (ec *ECPoint) ScalarMult(base *ECPoint, k *big.Int) *ECPoint {
 	ec.X, ec.Y = base.Curve.ScalarMult(base.X, base.Y, k.Bytes())
 	ec.Curve = base.Curve
+	ec.checkNil()
 
 	return ec
 }
@@ -116,6 +135,7 @@ func (ec *ECPoint) ScalarMult(base *ECPoint, k *big.Int) *ECPoint {
 // ScalarBaseMult returns g * scalar.(curve must be set)
 // set ec to new point.
 func (ec *ECPoint) ScalarBaseMult(k *big.Int) *ECPoint {
+	ec.checkNil()
 	ec.X, ec.Y = ec.Curve.ScalarBaseMult(k.Bytes())
 
 	return ec
@@ -130,6 +150,16 @@ func (ec *ECPoint) SetFromPublicKey(other *ecdsa.PublicKey) *ECPoint {
 	return ec
 }
 
+// ToPublicKey returns a public key of ecpoint.
+func (ec *ECPoint) ToPublicKey() *ecdsa.PublicKey {
+	res := new(ecdsa.PublicKey)
+	res.X = ec.X
+	res.Y = ec.Y
+	res.Curve = ec.Curve
+
+	return res
+}
+
 // Copy returns a new instance of current ec point.
 func (ec *ECPoint) Copy() *ECPoint {
 	n := new(ECPoint)
@@ -140,8 +170,15 @@ func (ec *ECPoint) Copy() *ECPoint {
 	return n
 }
 
-// Equals check two point equal or not.
+// Equal check two point equal or not.
 // return res.
-func (ec *ECPoint) Equals(other *ECPoint) bool {
+func (ec *ECPoint) Equal(other *ECPoint) bool {
 	return ec.X.Cmp(other.X) == 0 && ec.Y.Cmp(other.Y) == 0
+}
+
+//
+func (ec *ECPoint) Apply(other *ECPoint) {
+	ec.X = other.X
+	ec.Y = other.Y
+	ec.Curve = other.Curve
 }

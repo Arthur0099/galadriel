@@ -4,6 +4,8 @@ import (
 	"crypto/elliptic"
 	"encoding/json"
 	"math/big"
+
+	log "github.com/inconshreveable/log15"
 )
 
 // KeyBasePoint represents the base point used in curve to generate keys.
@@ -34,6 +36,8 @@ type PublicParams struct {
 	// bitSize is the size of msg.
 	// msg < 2^BitSize.
 	bitSize int
+	// aggreate proof size.
+	aggreateSize int
 
 	// vector base.
 	vb *VectorBase
@@ -72,6 +76,16 @@ func (pp *PublicParams) BitSizeLimit() int {
 	return pp.bitSize
 }
 
+// ResizeAggreate changes aggreate proof size.
+func (pp *PublicParams) ResizeAggreate(newSize int) {
+	if newSize < 1 {
+		log.Warn("can't resize aggreate to a value < 1", "actual", newSize)
+	}
+
+	pp.aggreateSize = newSize
+	params.vb = NewDefaultVectorBase(pp.curve, params.bitSize, params.aggreateSize)
+}
+
 // Max returns max value in protocol.
 func (pp *PublicParams) Max() *big.Int {
 	two := new(big.Int).SetUint64(2)
@@ -83,6 +97,15 @@ func (pp *PublicParams) Max() *big.Int {
 // Curve returns ec curve used in underlying field.
 func (pp *PublicParams) Curve() elliptic.Curve {
 	return pp.curve
+}
+
+// Reset reset all params.
+func (pp *PublicParams) Reset(bitSize, aggreateSize int, curve elliptic.Curve) {
+	params.curve = curve
+	params.bitSize = bitSize
+	params.aggreateSize = aggreateSize
+
+	params.vb = NewDefaultVectorBase(curve, params.bitSize, params.aggreateSize)
 }
 
 // MarshalJSON defines custom way to json.
@@ -114,11 +137,12 @@ func Params() *PublicParams {
 // init public params.
 func init() {
 	// todo: set config to switch curve.
-	//curve := S256()
 	curve := BN256()
+	// curve := NoCGOS256()
 
 	params.curve = curve
 	params.bitSize = 16
+	params.aggreateSize = 1
 
-	params.vb = NewDefaultVectorBase(curve, params.bitSize)
+	params.vb = NewDefaultVectorBase(curve, params.bitSize, params.aggreateSize)
 }
