@@ -12,7 +12,7 @@ contract DLESigmaVerifier {
   using BN128 for *;
 
   /**
-   * @dev verify dle sigma proof.
+   * @dev verify dle sigma proof. 4 mul, 2 add.
    * points[0-1]: A1 point.
    * points[2-3]: A2 point.
    * points[4-5]: g1 point.
@@ -72,7 +72,7 @@ contract DLESigmaVerifier {
   }
 
   /*
-   *
+   * @dev 2 mul, 1 add.
    */
   function checkDLESigmaProofBn128(uint[6] memory points, uint z, uint e) internal view returns(bool) {
     BN128.G1Point memory g = BN128.G1Point(points[0], points[1]);

@@ -17,7 +17,7 @@ import (
 var (
 	// GWEI is the uint of gas price
 	GWEI         = new(big.Int).SetUint64(1000 * 1000 * 1000)
-	testGasLimit = uint64(8000000)
+	testGasLimit = uint64(18000000)
 	one          = new(big.Int).SetUint64(1)
 	two          = new(big.Int).SetUint64(2)
 	zero         = new(big.Int).SetUint64(0)

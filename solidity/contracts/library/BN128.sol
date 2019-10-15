@@ -7,7 +7,7 @@ library BN128 {
     // uint256 public constant b = 3;
 
     // uint256 constant public ECSignMask = 0x8000000000000000000000000000000000000000000000000000000000000000;
-    // uint256 constant public BigModExponent = (n + 1)/4;
+    // uint256 constant public BigModExponent = (n + 1)/4;    
 
     struct G1Point {
         uint256 X;

@@ -14,6 +14,11 @@ var (
 	precision = new(big.Int).Exp(base, decimal, nil)
 )
 
+const (
+	// 2^5 = 32.
+	n = 5
+)
+
 type CT struct {
 	Ct    [4]*big.Int
 	Nonce *big.Int
@@ -38,8 +43,8 @@ type transferTx struct {
 	points  [28]*big.Int
 	scalar  [14]*big.Int
 	rpoints [16]*big.Int
-	l       [16]*big.Int
-	r       [16]*big.Int
+	l       [4 * n]*big.Int
+	r       [4 * n]*big.Int
 	nonce   *big.Int
 }
 
@@ -56,8 +61,8 @@ type burnPartTx struct {
 	points  [18]*big.Int
 	scalar  [12]*big.Int
 	rpoints [16]*big.Int
-	l       [16]*big.Int
-	r       [16]*big.Int
+	l       [4 * n]*big.Int
+	r       [4 * n]*big.Int
 	nonce   *big.Int
 }
 

@@ -12,8 +12,8 @@ contract PGCVerifier {
   using BN128 for uint;
 
   // bitSize of balance value.
-  uint public constant bitSize = 16;
-  uint public constant n = 4;
+  uint public constant bitSize = 32;
+  uint public constant n = 5;
   uint public constant maxNumber = 2**bitSize;
 
   // public h point.
@@ -137,7 +137,8 @@ contract PGCVerifier {
    * l[2*n-4*n-1]: range proof 2 l.x, l.y.
    * r[2*n-4*n-1]: range proof 2 r.x, r.y.
    */
-  function verifyTransfer(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint[4] memory ub) public view returns(bool) {
+   // n=5, bitSize=32, 190 mul, 178 add.
+  function verifyTransfer(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint[4] memory ub) public returns(bool) {
 
     CT memory userBalance;
     userBalance.X.X = ub[0];
@@ -150,6 +151,7 @@ contract PGCVerifier {
     for (b.i = 0; b.i < 20; b.i++) {
       b.sigmaPoints[b.i] = points[b.i];
     }
+    // 10 mul, 6 add.
     require(sigmaVerifier.verifySigmaProof(b.sigmaPoints, scalar[0], scalar[1], scalar[2]), "sigma verify failed");
 
     // check balance updated is same with refreshed balance.
@@ -158,6 +160,7 @@ contract PGCVerifier {
     for (b.i = 0; b.i < 4; b.i++) {
       b.ct1Points[b.i] = points[2+b.i];
     }
+    // 2 add.
     // get tmp balance = alice'balnce - transfer'balance
     b.tmpUpdatedBalance.X = userBalance.X.add(b.ct1.X.neg());
     b.tmpUpdatedBalance.Y = userBalance.Y.add(b.ct1.Y.neg());
@@ -166,6 +169,7 @@ contract PGCVerifier {
     b.dleSigmaPoints[0] = BN128.G1Point(points[24], points[25]);
     b.dleSigmaPoints[1] = BN128.G1Point(points[26], points[27]);
     // only this failed.
+    // 4 mul, 4 add.
     require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[3]), "dle sigma proof failed");
 
     // check range proof 1.
@@ -182,6 +186,7 @@ contract PGCVerifier {
     for (b.i = 0; b.i < 5; b.i++) {
       b.rscalar[b.i] = scalar[4+b.i];
     }
+    // 2*(bitSize+n)+14 mul, 2*(bitSize+n)+9 add.
     require(rangeProofVerifier.verifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 1 failed");
 
     // check range proof 2.
@@ -197,6 +202,7 @@ contract PGCVerifier {
     for (b.i = 0; b.i < 5; b.i++) {
       b.rscalar[b.i] = scalar[9+b.i];
     }
+    // 2*(bitSize+n)+14 mul, 2*(bitSize+n)+9 add.
     require(rangeProofVerifier.verifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 2 verify failed");
 
     return true;
@@ -250,7 +256,7 @@ contract PGCVerifier {
    * l[2*n-4*n-1]: range proof 2 l.x, l.y.
    * r[2*n-4*n-1]: range proof 2 r.x, r.y.
    */
-  function verifyBurnPart(uint amount, uint[18] memory points, uint[12] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint[4] memory ub) public view returns(bool) {
+  function verifyBurnPart(uint amount, uint[18] memory points, uint[12] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint[4] memory ub) public returns(bool) {
     CT memory userBalance;
     userBalance.X.X = ub[0];
     userBalance.X.Y = ub[1];
@@ -332,6 +338,7 @@ contract PGCVerifier {
     return true;
   }
 
+  // 4 mul, 4 add.
   function verifyDLESigmaProof(CT memory ori, CT memory refresh, BN128.G1Point[2] memory p, uint pkx, uint pky, uint z) internal view returns(bool) {
     BN128.G1Point memory g1 = refresh.Y.add(ori.Y.neg());
     BN128.G1Point memory h1 = refresh.X.add(ori.X.neg());

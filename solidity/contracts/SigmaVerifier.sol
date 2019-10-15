@@ -27,7 +27,7 @@ contract SigmaVerifier {
   }
 
   /*
-   * @dev verify sigma proof.
+   * @dev verify sigma proof. 10 mul, 6 add.
    * points[0-1]: pk1
    * points[2-3]: ct1 X
    * points[4-5]: ct1 Y
@@ -83,7 +83,7 @@ contract SigmaVerifier {
   }
 
   /*
-   * @dev check pk * z == A + X * e.
+   * @dev check pk * z == A + X * e. 2 mul, 1 add.
    * points[0]: pk
    * points[1]: A
    * points[2]: X
@@ -100,7 +100,7 @@ contract SigmaVerifier {
   }
 
   /*
-   * @dev check h*za + g*zb == B + Y*e.
+   * @dev check h*za + g*zb == B + Y*e. 3 mul, 2 add.
    * points[0]: B
    * points[1]: Y
    */

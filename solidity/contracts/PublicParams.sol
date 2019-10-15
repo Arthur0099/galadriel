@@ -15,9 +15,9 @@ contract PublicParams {
 
   // bit size for vector.
   // value range [0, 2^bitSize-1]
-  uint public constant bitSize = 16;
+  uint public constant bitSize = 32;
   // 2^n=bitSize; n is the number of ecpoints in innerproduct.
-  uint public constant n = 4;
+  uint public constant n = 5;
 
   // fix point used in inner product.
   BN128.G1Point public u;

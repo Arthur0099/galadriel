@@ -97,8 +97,8 @@ contract PGC {
   mapping(uint => mapping(uint => uint)) pendingFunNonce;
 
   // bitSize of balance value.
-  uint public constant bitSize = 16;
-  uint public constant n = 4;
+  uint public constant bitSize = 32;
+  uint public constant n = 5;
   uint public constant maxNumber = 2**bitSize;
 
   // public h point.
@@ -189,7 +189,6 @@ contract PGC {
       require(IERC20(tokenAddr).transferFrom(msg.sender, address(this), tokenAmount), "token transfer failed");
       pgcAmount = tokenConverter.convertToPGC(tokenAddr, tokenAmount);
     }
-
     // encrypt amount and pending it.
     CT memory pb = encrypt(pgcAmount, BN128.G1Point(publicKey[0], publicKey[1]));
     toBalanceOrPending(pb, publicKey[0], publicKey[1], uint(tokenAddr));
@@ -252,16 +251,19 @@ contract PGC {
    */
   function transfer(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint token, uint nonce, uint[2] memory sig) public returns(bool) {
     // check for sig and nonce.
+    // 4 mul, 1 add.
     require(verifyTransferSig(points, scalar, rpoints, l, r, token, nonce, sig), "verify sig failed for transfertx");
 
     Board memory b;
+    // 2 add if no pending.
     (b.userBalance, b.localNonce) = getUserBalance(points[0], points[1], address(token));
     // check for nonce.
     require(nonce == b.localNonce, "invalid nonce");
-
+    // n=5, bitSize=32, 190 mul, 178 add.
     require(pgcVerifier.verifyTransfer(points, scalar, rpoints, l, r, b.userBalance), "verify proofs for transfer failed");
 
     // update sender's balance.
+    // 4 add.
     b.ct1.X = BN128.G1Point(points[2], points[3]);
     b.ct1.Y = BN128.G1Point(points[4], points[5]);
     b.tmpUpdatedBalance = getBalanceCanSpentInternal(points[0], points[1], token);
@@ -472,7 +474,7 @@ contract PGC {
   }
 
   /*
-   *
+   * @dev 4 mul, 1 add.
    */
   function verifySig(uint hash, uint pkx, uint pky, uint r, uint s) internal view returns(bool) {
     s = s.inv();

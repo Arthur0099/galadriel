@@ -5,8 +5,8 @@ import "./library/BN128.sol";
 interface IPParams {
   function getBitSize() external view returns(uint);
   function getN() external view returns(uint);
-  function getGVector() external view returns(uint[32] memory);
-  function getHVector() external view returns(uint[32] memory);
+  function getGVector() external view returns(uint[64] memory);
+  function getHVector() external view returns(uint[64] memory);
   function getU() external view returns(uint[2] memory);
 }
 
@@ -15,9 +15,9 @@ contract IPVerifier {
   using BN128 for uint;
 
   // bit size of value.
-  uint public constant bitSize = 16;
+  uint public constant bitSize = 32;
   // number of inner product points.
-  uint public constant n = 4;
+  uint public constant n = 5;
 
   // u fix point used in inner product.
   BN128.G1Point public u;

@@ -501,8 +501,8 @@ func newTransferTx() *transferTx {
 	tx.points = [28]*big.Int{}
 	tx.scalar = [14]*big.Int{}
 	tx.rpoints = [16]*big.Int{}
-	tx.l = [16]*big.Int{}
-	tx.r = [16]*big.Int{}
+	tx.l = [4 * n]*big.Int{}
+	tx.r = [4 * n]*big.Int{}
 
 	return &tx
 }
@@ -512,8 +512,8 @@ func newBurnPartTx() *burnPartTx {
 	tx.points = [18]*big.Int{}
 	tx.scalar = [12]*big.Int{}
 	tx.rpoints = [16]*big.Int{}
-	tx.l = [16]*big.Int{}
-	tx.r = [16]*big.Int{}
+	tx.l = [4 * n]*big.Int{}
+	tx.r = [4 * n]*big.Int{}
 
 	return &tx
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
+	log "github.com/inconshreveable/log15"
 )
 
 func TestG1Point(t *testing.T) {
@@ -56,6 +57,23 @@ func TestG1Point(t *testing.T) {
 	if pOrder.Cmp(params.P) != 0 {
 		t.Error("curve p error")
 	}
+}
+
+func TestInverse(t *testing.T) {
+	c := BN128{}
+	r := fromString("11888242871839275222246405745257275088548364400416034343698204186575808495617")
+
+	norx, nory := c.ScalarBaseMult(r.Bytes())
+	rInverse := new(big.Int).ModInverse(r, c.Params().N)
+	log.Debug("n", "n", c.Params().N)
+	nn := new(big.Int).Add(r, rInverse)
+	log.Debug("nn", "nn", nn)
+	invx, invy := c.ScalarBaseMult(rInverse.Bytes())
+	log.Debug("nor", "x", norx, "y", nory)
+	log.Debug("inv", "x", invx, "y", invy)
+	log.Debug("base", "x", c.Params().Gx, "y", c.Params().Gy)
+	ggx, ggy := c.Add(norx, nory, invx, invy)
+	log.Debug("gg", "x", ggx, "y", ggy)
 }
 
 func BenchmarkMult(b *testing.B) {
