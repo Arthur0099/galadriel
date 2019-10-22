@@ -70,3 +70,36 @@ bulletproof零知识证明。
 
 * [百科](https://zh.wikipedia.org/wiki/ElGamal%E5%8A%A0%E5%AF%86%E7%AE%97%E6%B3%95)
 * [bulletproof-rust](https://doc-internal.dalek.rs/bulletproofs/notes/index.html)
+
+## zether对比
+
+1. 6.2优化.(pgc也用了里面的sigle muti)
+2. conftransfer中, sigmaproof和2个rangeproof共花费了156次加法和154次乘法.
+3. 关于multi-exponent的说法, 在18页.?? 反而会增加gas消耗.(不适合solidity)
+
+## pgc
+
+# 32bit
+transfer:
+1. sigma proof: 10 mul, 6 add.
+2. dle sigma proof: 4 mul, 4 add.
+3. range proof: 2*(bitSize+n)+14 mul, 2*(bitSize+n)+9 add.
+4. sig: 4 mul, 1 add.
+5. 其他: 8 add.
+
+1. mul: 40000 gas; add: 600 gas.
+
+2. transfer 共用了1次sigma, 1次dlesigma, 2次range: **194 mul, 185 add**,总共消耗gas**9182528**(曲线消耗**7871000**, 其余消耗**1311528**)
+3. zether 1次sigma,2次range, 154 mul, 156 add. (曲线消耗**6253600**, 总共**718.8万**, 其余消耗**934400**)
+
+使用分叉后:
+mul: 6000 gas; add: 150 gas.
+transfer: **3191240**, 曲线**1191750**, 其余**1999490**
+
+# 16bit
+
+1. transfer, gas:**5894975**(曲线消耗**2914000**, 其余消耗**2980975**)
+
+使用分叉后: 
+mul: 6000 gas; add: 150 gas.
+gas:**2162394**(曲线消耗**442200**, 其余消耗**1720194**)
