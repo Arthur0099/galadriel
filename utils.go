@@ -42,7 +42,7 @@ func ComputeChallengeByECPoints(order *big.Int, points ...*ECPoint) (*big.Int, e
 // use abi.Arguments.Pack(A1, A2, B1, B2)
 // hash(bytes)
 func ComputeChallenge(order *big.Int, data ...interface{}) (*big.Int, error) {
-	uint256Type, _ := abi.NewType("uint256", nil)
+	uint256Type, _ := abi.NewType("uint256", "", nil)
 	arguments := make(abi.Arguments, 0)
 	for i := 0; i < len(data); i++ {
 		argument := abi.Argument{}

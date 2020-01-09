@@ -103,3 +103,20 @@ transfer: **3191240**, 曲线**1191750**, 其余**1999490**
 使用分叉后: 
 mul: 6000 gas; add: 150 gas.
 gas:**2162394**(曲线消耗**442200**, 其余消耗**1720194**)
+
+
+# 最新对比
+
+zether transfer(32bit):
+* gascost: 7188k.
+* eccost: 6455k.
+* tx: 1472bytes.
+
+
+pgc transfer(32bit);
+* gascost: 9183k.
+* eccost: 7871k.
+* tx: 3268bytes(未对点进行压缩优化).
+
+
+// 

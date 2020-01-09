@@ -1,3 +1,6 @@
 # npm modules.
 solidity/node_modules
 solidity/build
+
+.vscode
+.emacs.desktop
