@@ -59,7 +59,7 @@ contract IPVerifier {
    * scalar[1]: b.
    * scalar[2]: c.
    */
-  function verifyIPProof(uint[2] memory p, uint[n*2] memory l, uint[n*2] memory r, uint[3] memory scalar) public view returns(bool) {
+  function verifyIPProof(uint[2] memory p, uint[n*2] memory l, uint[n*2] memory r, uint[3] memory scalar) public returns(bool) {
     return verifyIPProofWithCustomParams(ipParams.getGVector(), ipParams.getHVector(), p, scalar[2], l, r, scalar[0], scalar[1]);
   }
 
@@ -67,7 +67,7 @@ contract IPVerifier {
    * @dev call by range proof.
    * @dev Warning: hv isn't the public h vector generator.
    */
-  function verifyIPProofWithCustomParams(uint[bitSize*2] memory gv, uint[bitSize*2] memory hv, uint[2] memory p, uint c, uint[n*2] memory l, uint[n*2] memory r, uint a, uint b) public view returns(bool) {
+  function verifyIPProofWithCustomParams(uint[bitSize*2] memory gv, uint[bitSize*2] memory hv, uint[2] memory p, uint c, uint[n*2] memory l, uint[n*2] memory r, uint a, uint b) public returns(bool) {
     BN128.G1Point[bitSize] memory gvPoints;
     BN128.G1Point[bitSize] memory hvPoints;
     for (uint i = 0; i < bitSize; i++) {

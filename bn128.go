@@ -9,6 +9,11 @@ import (
 	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 )
 
+// Marshaler can marshal a point to a big.int.
+type Marshaler interface {
+	Marshal(x, y *big.Int) []byte
+}
+
 // BN128 implements elliptic.curve.
 type BN128 struct {
 }
@@ -72,6 +77,11 @@ func (bn128 *BN128) ScalarMult(x1, y1 *big.Int, k []byte) (x, y *big.Int) {
 func (bn128 *BN128) ScalarBaseMult(k []byte) (x, y *big.Int) {
 	p := new(bn256.G1).ScalarBaseMult(new(big.Int).SetBytes(k))
 	return MustG1ToPoint(p)
+}
+
+// Marshal marshal x, y point to byte slice.
+func (bn128 *BN128) Marshal(x, y *big.Int) []byte {
+	return MustPointToG1(x, y).Marshal()
 }
 
 // MustG1ToPoint convert g1 struct to x,y point. panic if error.

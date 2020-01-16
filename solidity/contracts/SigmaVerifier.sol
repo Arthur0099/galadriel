@@ -26,6 +26,72 @@ contract SigmaVerifier {
     h.Y = tmpH[1];
   }
 
+  // points[0-1]: pk1
+  // points[2-3]: pk2
+  // points[4-5]: x1
+  // points[6-7]: x2
+  // points[8-9]: Y
+  // points[10-11]: A1
+  // points[12-13]: A2
+  // points[14-15]: B
+  // 7 mul, 4 add.
+  function verifyPTEProof(uint[16] memory points, uint z1, uint z2) public returns(bool) {
+    uint e;
+    e = computeC(points[10], points[11], points[12], points[13]);
+
+    // 2 mul, 1 add.
+    // check pk1 * z1 == A1 + X1 * e.
+    BN128.G1Point[3] memory point1;
+    point1[0] = BN128.G1Point(points[0], points[1]);
+    point1[1] = BN128.G1Point(points[10], points[11]);
+    point1[2] = BN128.G1Point(points[4], points[5]);
+
+    if (!verifyStep1(point1, z1, e)) {
+      return false;
+    }
+    
+    // 2 mul, 1 add.
+    // check pk2 * z1 == A2 + X2 * e.
+    BN128.G1Point[3] memory point2;
+    point2[0] = BN128.G1Point(points[2], points[3]);
+    point2[1] = BN128.G1Point(points[12], points[13]);
+    point2[2] = BN128.G1Point(points[6], points[7]);
+    if (!verifyStep1(point2, z1, e)) {
+      return false;
+    }
+
+    // 3 mul, 2 add.
+    // Check h * z1 + g * z2 == B + Y * e.
+    BN128.G1Point[2] memory point3;
+    point3[0] = BN128.G1Point(points[14], points[15]);
+    point3[1] = BN128.G1Point(points[8], points[9]);
+    return verifyStep2(point3, z1, z2, e);
+  }
+
+  // points[0-1]: pk
+  // points[2-3]: ct x
+  // points[4-5]: ct y
+  // points[6-7]: A
+  // points[8-9]: B
+  function verifyCTValidProof(uint[10] memory points, uint z1, uint z2) public returns(bool) {
+    uint e;
+    e = computeC(points[6], points[7], points[8], points[9]);
+
+    // check pk*z1 = A + X*e.
+    BN128.G1Point[3] memory point1;
+    point1[0] = BN128.G1Point(points[0], points[1]);
+    point1[1] = BN128.G1Point(points[6], points[7]);
+    point1[2] = BN128.G1Point(points[2], points[3]);
+    if (!verifyStep1(point1, z1, e)) {
+      return false;
+    }
+    // check g*z2 + h*z1 = B + Y*e.
+    BN128.G1Point[2] memory point2;
+    point2[0] = BN128.G1Point(points[8], points[9]);
+    point2[1] = BN128.G1Point(points[4], points[5]);
+    return verifyStep2(point2, z1, z2, e);
+  }
+
   /*
    * @dev verify sigma proof. 10 mul, 6 add.
    * points[0-1]: pk1
@@ -115,5 +181,9 @@ contract SigmaVerifier {
   // compute challenge for proof.
   function computeChallenge(uint a, uint b, uint c, uint d, uint e, uint f, uint i, uint j) internal pure returns(uint) {
     return uint(keccak256(abi.encodePacked(a, b, c, d, e, f, i, j))).mod();
+  }
+
+  function computeC(uint a, uint b, uint c, uint d) internal returns(uint) {
+        return uint(keccak256(abi.encodePacked(a, b, c, d))).mod();
   }
 }

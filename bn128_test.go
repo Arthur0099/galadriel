@@ -88,7 +88,8 @@ func BenchmarkMult(b *testing.B) {
 func TestBaseFun(t *testing.T) {
 	r := new(big.Int).SetUint64(0)
 	c := BN128{}
-	c.ScalarBaseMult(r.Bytes())
+	x, y := c.ScalarBaseMult(r.Bytes())
+	log.Info("base", "x", x, "y", y)
 }
 
 func BenchmarkMultS(b *testing.B) {

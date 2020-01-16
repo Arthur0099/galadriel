@@ -6,8 +6,8 @@ import (
 
 func TestInnerProductProtocol(t *testing.T) {
 	// create public params for test.
-	curve := S256()
-	n := 32
+	curve := BN256()
+	n := 64
 	order := curve.Params().N
 	g := NewDefaultGV(curve, n)
 	h := NewDefaultHV(curve, n)
@@ -34,6 +34,10 @@ func TestInnerProductProtocol(t *testing.T) {
 	verifier.U = u
 	if !verifier.VerifyIPProof(g.Copy(), h.Copy(), p, c, proof) {
 		t.Error("verify failed")
+	}
+
+	if !verifier.optVerifyIPProof(g.Copy(), h.Copy(), p, c, proof) {
+		t.Error("optimized failed")
 	}
 }
 

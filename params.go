@@ -99,6 +99,8 @@ func (pp *PublicParams) Curve() elliptic.Curve {
 	return pp.curve
 }
 
+// AcutalCurve returns .
+
 // Reset reset all params.
 func (pp *PublicParams) Reset(bitSize, aggreateSize int, curve elliptic.Curve) {
 	params.curve = curve
@@ -142,7 +144,7 @@ func init() {
 
 	params.curve = curve
 	params.bitSize = 32
-	params.aggreateSize = 1
+	params.aggreateSize = 2
 
 	params.vb = NewDefaultVectorBase(curve, params.bitSize, params.aggreateSize)
 }

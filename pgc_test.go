@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	log "github.com/inconshreveable/log15"
 	"github.com/pgc/contracts"
 	"github.com/stretchr/testify/require"
 )
@@ -144,6 +145,7 @@ func TestLocal(t *testing.T) {
 	// test for eth.
 	testPGCFlow(sender, client, t, nil, common.Address{}, cs)
 
+	return
 	// test for token.
 	tokenContract, tokenAddr := DeployToken(sender, client)
 	testPGCFlow(sender, client, t, tokenContract, tokenAddr, cs)
@@ -188,7 +190,7 @@ func testPGCPending(sender *bind.TransactOpts, rpcClient *Client, client *ethcli
 			if err != nil {
 				panic(err)
 			}
-			t.Log("add token to tokenconverter", "tx", addTokenTx.Hash().Hex())
+			log.Info("add token to tokenconverter", "tx", addTokenTx.Hash().Hex())
 			waitFor(addTokenTx.Hash(), client)
 			sender.Nonce.Add(sender.Nonce, one)
 
@@ -232,7 +234,7 @@ func testPGCPending(sender *bind.TransactOpts, rpcClient *Client, client *ethcli
 	openPendingTx, err := cs.PGC.OpenPending(sender, bob.sk.PublicKey.X, bob.sk.PublicKey.Y, bobEpoch, pendingFunNonce, bobOpenPendingSig.ToInputs())
 	pendingFunNonce.Add(pendingFunNonce, one)
 	require.Nil(t, err, "open pending tx failed")
-	t.Log("open pending tx", openPendingTx.Hash().Hex())
+	log.Info("open pending tx", openPendingTx.Hash().Hex())
 	waitFor(openPendingTx.Hash(), client)
 	sender.Value = new(big.Int).Mul(ether, bobInitBalance)
 	sender.Value.Div(sender.Value, precision)
@@ -274,7 +276,7 @@ func testPGCPending(sender *bind.TransactOpts, rpcClient *Client, client *ethcli
 	aliceOpenPendingTx, err := cs.PGC.OpenPending(sender, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, aliceEpoch, alicePendingFunNonce, aliceOpenPendingSig.ToInputs())
 	require.Nil(t, err, "alice open pending capacity tx failed")
 	alicePendingFunNonce.Add(alicePendingFunNonce, one)
-	t.Log("open pending tx", aliceOpenPendingTx.Hash().Hex())
+	log.Info("open pending tx", aliceOpenPendingTx.Hash().Hex())
 	waitFor(aliceOpenPendingTx.Hash(), client)
 	sender.Nonce.Add(sender.Nonce, one)
 
@@ -291,7 +293,7 @@ func testPGCPending(sender *bind.TransactOpts, rpcClient *Client, client *ethcli
 	transferTxHash, err := cs.PGC.Transfer(sender, transferTx.points, transferTx.scalar, transferTx.rpoints, transferTx.l, transferTx.r, new(big.Int).SetBytes(token.Bytes()), transferTx.nonce, transferSig.ToInputs())
 	require.Nil(t, err, "transfer tx failed")
 	waitFor(transferTxHash.Hash(), client)
-	t.Log("transfer from bob to alice", transferAmount, transferTxHash.Hash().Hex())
+	log.Info("transfer from bob to alice", transferAmount, transferTxHash.Hash().Hex())
 	sender.Nonce.Add(sender.Nonce, one)
 
 	// check for bob's and alice's balance.
@@ -310,7 +312,7 @@ func testPGCPending(sender *bind.TransactOpts, rpcClient *Client, client *ethcli
 	closePendingTx, err := cs.PGC.ClosePending(sender, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, alicePendingFunNonce, closePendingSig.ToInputs())
 	alicePendingFunNonce.Add(alicePendingFunNonce, one)
 	require.Nil(t, err, "alice close pending failed")
-	t.Log("alice close pending tx", closePendingTx.Hash().Hex())
+	log.Info("alice close pending tx", closePendingTx.Hash().Hex())
 	waitFor(closePendingTx.Hash(), client)
 	sender.Nonce.Add(sender.Nonce, one)
 
@@ -329,7 +331,7 @@ func testPGCPending(sender *bind.TransactOpts, rpcClient *Client, client *ethcli
 	burnHash, _ := HashBurnPart(receiver, token, burnPartTTx)
 	burnSig, _ := Sign(alice.sk, burnHash)
 	burnTx, err := cs.PGC.BurnPart(sender, receiver, new(big.Int).SetBytes(token.Bytes()), burnPartTTx.amount, burnPartTTx.points, burnPartTTx.scalar, burnPartTTx.rpoints, burnPartTTx.l, burnPartTTx.r, burnPartTTx.nonce, burnSig.ToInputs())
-	t.Log("burn part tx", burnTx.Hash().Hex())
+	log.Info("burn part tx", "tx", burnTx.Hash().Hex())
 	waitFor(burnTx.Hash(), client)
 
 	// check alice's balance
@@ -360,7 +362,7 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 			if err != nil {
 				panic(err)
 			}
-			t.Log("add token to tokenconverter", "tx", addTokenTx.Hash().Hex())
+			log.Info("add token to tokenconverter", "tx", addTokenTx.Hash().Hex())
 			waitFor(addTokenTx.Hash(), client)
 			sender.Nonce.Add(sender.Nonce, one)
 
@@ -379,6 +381,7 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 	aliceTx, err := cs.PGC.DepositAccount(sender, alicePK, token, aliceInitBalance)
 	require.Nil(t, err, "deposit contract failed")
 	waitFor(aliceTx.Hash(), client)
+	log.Info("deposit alice success", "tx", aliceTx.Hash().Hex())
 
 	// check for alice's encrypted balance.
 	aliceEncryptB, _ := cs.PGC.GetUserBalance(nil, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, token)
@@ -409,41 +412,54 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 	require.Equal(t, bobInitBalance.Bytes(), bobDecryptB, "bob's balance on chain not same with local")
 	// keep balance same with chain.
 	bob.UpdateBalance(bobEncryptB)
+	sender.Value = nil
 
 	transferAmount := new(big.Int).SetUint64(300)
-	ctx, err := CreateCTX(alice, &bob.sk.PublicKey, transferAmount)
-	require.Nil(t, err, "create transfer ctx failed")
+
+	// user two range proof.
+	// ctx, err := CreateCTX(alice, &bob.sk.PublicKey, transferAmount)
+	// require.Nil(t, err, "create transfer ctx failed")
 
 	// send transfer tx to contract on chain.
-	tx := ctxToTransferTx(ctx)
-	transferHash, err := HashTransfer(tx, token)
-	require.Nil(t, err, "hash transfer data failed")
+	// tx := ctxToTransferTx(ctx)
+	// transferHash, err := HashTransfer(tx, token)
+	// require.Nil(t, err, "hash transfer data failed")
 
-	transferSig, err := Sign(alice.sk, transferHash)
-	require.Nil(t, err, "alice sign for transfer tx failed")
+	// transferSig, err := Sign(alice.sk, transferHash)
+	// require.Nil(t, err, "alice sign for transfer tx failed")
 
-	sender.Value = nil
-	transferTxHash, err := cs.PGC.Transfer(sender, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, new(big.Int).SetBytes(token.Bytes()), tx.nonce, transferSig.ToInputs())
+	// sender.Value = nil
+	// transferTxHash, err := cs.PGC.Transfer(sender, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, new(big.Int).SetBytes(token.Bytes()), tx.nonce, transferSig.ToInputs())
+	// require.Nil(t, err, "create transfer tx failed")
+
+	// use aggreate .
+	pgcCTX, err := CreatePGCCtx(alice, &bob.sk.PublicKey, transferAmount)
+	require.Nil(t, err, "create transfer ctx failed")
+	input := pgcCTX.ExportToSolidityInput()
+
+	transferTxHash, err := cs.PGC.AggTransfer(sender, input.points, input.scalars, input.l, input.r)
 	require.Nil(t, err, "create transfer tx failed")
 
 	sender.Nonce.Add(sender.Nonce, one)
 	waitFor(transferTxHash.Hash(), client)
-	// cost 6444057 gas
-	t.Log("transfer from alice to bob", transferAmount, transferTxHash.Hash().Hex())
+	log.Info("transfer from alice to bob", "transfer amount", transferAmount, "hash", transferTxHash.Hash().Hex())
+
+	// for test.
+	// return
 
 	// check alice/bob balance.
 	aliceEncBalanceAfter, _ := cs.PGC.GetUserBalance(nil, alicePK[0], alicePK[1], token)
 	aliceBalanceAfter := Decrypt(alice.sk, arrayToCT(aliceEncBalanceAfter, alice.sk.Curve))
 	aliceExceptBalance := new(big.Int).Sub(aliceInitBalance, transferAmount)
 	require.Equal(t, aliceExceptBalance.Bytes(), aliceBalanceAfter, "alice balance after transfer is invalid")
-	t.Log("alice'balance after is", new(big.Int).SetBytes(aliceBalanceAfter))
+	log.Info("alice'balance after is", "balance", new(big.Int).SetBytes(aliceBalanceAfter))
 
 	// check for bob's balance.
 	bobEncryptBalanceAfter, _ := cs.PGC.GetUserBalance(nil, bobPK[0], bobPK[1], token)
 	bobBalanceAfter := Decrypt(bob.sk, arrayToCT(bobEncryptBalanceAfter, bob.sk.Curve))
 	bobExceptBalance := new(big.Int).Add(bobInitBalance, transferAmount)
 	require.Equal(t, bobExceptBalance.Bytes(), bobBalanceAfter, "bob balance after transfer is invalid")
-	t.Log("bob's balance after is ", new(big.Int).SetBytes(bobBalanceAfter))
+	log.Info("bob's balance after is ", "balance", new(big.Int).SetBytes(bobBalanceAfter))
 	bob.UpdateBalance(bobEncryptBalanceAfter)
 
 	bob.m = new(big.Int).Set(bobExceptBalance)
@@ -461,15 +477,38 @@ func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing
 
 	burnTxH, err := cs.PGC.BurnPart(sender, receiver, new(big.Int).SetBytes(token.Bytes()), tmpInfo.amount, tmpInfo.points, tmpInfo.scalar, tmpInfo.rpoints, tmpInfo.l, tmpInfo.r, tmpInfo.nonce, burnSig.ToInputs())
 	require.Nil(t, err, "bob create burn part tx failed")
-	t.Log("burn part tx", burnTxH.Hash().Hex(), "burn amount", burnAmount)
+	log.Info("burn part tx", "hash", burnTxH.Hash().Hex(), "burn amount", burnAmount)
 	waitFor(burnTxH.Hash(), client)
 	sender.Nonce.Add(sender.Nonce, one)
 
 	// check bob's balance.
 	bobFinalEncBalance, _ := cs.PGC.GetUserBalance(nil, bobPK[0], bobPK[1], token)
 	bobf := Decrypt(bob.sk, arrayToCT(bobFinalEncBalance, bob.sk.Curve))
-	t.Log("bob's final balance", "amount", new(big.Int).SetBytes(bobf))
+	log.Info("bob's final balance", "amount", new(big.Int).SetBytes(bobf))
 	finalExpect := new(big.Int).Sub(new(big.Int).SetBytes(bobBalanceAfter), burnAmount)
+	require.Equal(t, finalExpect.Bytes(), bobf, "bob'balance after burn is invalid")
+
+	// burn all amount.
+	bob.nonce = bobFinalEncBalance.Nonce.Uint64()
+	bob.balance.X.X = bobFinalEncBalance.Ct[0]
+	bob.balance.X.Y = bobFinalEncBalance.Ct[1]
+	bob.balance.Y.X = bobFinalEncBalance.Ct[2]
+	bob.balance.Y.Y = bobFinalEncBalance.Ct[3]
+	burnTx, err := CreateBurnTx(bob, finalExpect)
+	require.Nil(t, err)
+	burnTxInfo := burnTxToOb(burnTx)
+	burnHash, err = HashBurn(receiver, token, burnTxInfo)
+	require.Nil(t, err)
+	burnSig, err = Sign(bob.sk, burnHash)
+	require.Nil(t, err)
+	burnTxHash, err := cs.PGC.Burn(sender, receiver, new(big.Int).SetBytes(token.Bytes()), finalExpect, burnTxInfo.pk, burnTxInfo.proof, burnTxInfo.z, burnTxInfo.nonce, burnSig.ToInputs())
+	log.Info("bob's burn all tx", "tx", burnTxHash.Hash().Hex())
+
+	// check bob's balance.
+	bobFinalEncBalance, _ = cs.PGC.GetUserBalance(nil, bobPK[0], bobPK[1], token)
+	bobf = Decrypt(bob.sk, arrayToCT(bobFinalEncBalance, bob.sk.Curve))
+	log.Info("bob's final balance", "amount", new(big.Int).SetBytes(bobf))
+	finalExpect = new(big.Int).SetUint64(0)
 	require.Equal(t, finalExpect.Bytes(), bobf, "bob'balance after burn is invalid")
 }
 

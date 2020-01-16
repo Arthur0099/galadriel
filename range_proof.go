@@ -23,6 +23,39 @@ type RangeProof struct {
 	ipProof *IPProof
 }
 
+type rangeProofInput struct {
+	points [10]*big.Int
+	scalar [5]*big.Int
+	l, r   [10]*big.Int
+}
+
+func (proof *RangeProof) ToSolidityInput() rangeProofInput {
+	input := rangeProofInput{}
+	input.points[0] = proof.A.X
+	input.points[1] = proof.A.Y
+	input.points[2] = proof.S.X
+	input.points[3] = proof.S.Y
+	input.points[4] = proof.T1.X
+	input.points[5] = proof.T1.Y
+	input.points[6] = proof.T2.X
+	input.points[7] = proof.T2.Y
+
+	input.scalar[0] = proof.t
+	input.scalar[1] = proof.tx
+	input.scalar[2] = proof.u
+	input.scalar[3] = proof.ipProof.a
+	input.scalar[4] = proof.ipProof.b
+
+	for i := 0; i < len(proof.ipProof.L); i++ {
+		input.l[2*i] = proof.ipProof.L[i].X
+		input.l[2*i+1] = proof.ipProof.L[i].Y
+		input.r[2*i] = proof.ipProof.R[i].X
+		input.r[2*i+1] = proof.ipProof.R[i].Y
+	}
+
+	return input
+}
+
 // MarshalJSON defines custom way to json.
 func (rangeProof *RangeProof) MarshalJSON() ([]byte, error) {
 	newJSON := struct {
@@ -50,7 +83,7 @@ func (rangeProof *RangeProof) MarshalJSON() ([]byte, error) {
 
 // GenerateRangeProof generates proof to prove v in certain range without revealing it.
 func GenerateRangeProof(vb *VectorBase, v, random *big.Int) (*RangeProof, error) {
-	size := vb.GetVectorSize()
+	size := vb.GetBitSize()
 	n := vb.GetCurve().Params().N
 
 	alVector, err := BitVector(v, size)

@@ -67,7 +67,7 @@ func VerifyCTValidProof(pk *ecdsa.PublicKey, ct *CTEncPoint, proof *CTValidProof
 		log.Warn("compute challenge failed", "err", err)
 	}
 
-	// check pk*z1 ?= A + X*e.
+	// check pk*z1 = A + X*e.
 	left := new(ECPoint).SetFromPublicKey(pk)
 	left.ScalarMult(left, proof.Z1)
 	right := new(ECPoint).ScalarMult(ct.X, e)

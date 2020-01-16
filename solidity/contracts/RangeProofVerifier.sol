@@ -197,7 +197,6 @@ contract RangeProofVerifier {
   }
 
 
-event TT(uint indexed i, uint indexed l, uint indexed ll);
   /*
    * @dev 2*(bitSize+n)+14 mul, 2*(bitSize+n)+9 add.
    */

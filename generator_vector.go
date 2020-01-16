@@ -60,10 +60,12 @@ func NewRandomGeneratorVector(curve elliptic.Curve, n int) *GeneratorVector {
 // NewDefaultGV creates default g vector.
 func NewDefaultGV(curve elliptic.Curve, n int) *GeneratorVector {
 	g := GeneratorVector{}
-
+	data := Keccak256([]byte("gvs"))
+	gvb := new(big.Int).SetBytes(data)
+	gvb.Mod(gvb, curve.Params().N)
 	for i := 0; i < n; i++ {
-
-		scalar, err := ComputeChallenge(curve.Params().N, new(big.Int).SetUint64(uint64(i)))
+		tmpv := new(big.Int).Add(gvb, new(big.Int).SetUint64(uint64(i)))
+		scalar, err := ComputeChallenge(curve.Params().N, tmpv)
 		if err != nil {
 			panic(err)
 		}
@@ -76,9 +78,13 @@ func NewDefaultGV(curve elliptic.Curve, n int) *GeneratorVector {
 // NewDefaultHV creates default h vector.
 func NewDefaultHV(curve elliptic.Curve, n int) *GeneratorVector {
 	g := GeneratorVector{}
+	data := Keccak256([]byte("hvs"))
+	hvb := new(big.Int).SetBytes(data)
+	hvb.Mod(hvb, curve.Params().N)
 
 	for i := 0; i < n; i++ {
-		scalar, err := ComputeChallenge(curve.Params().N, new(big.Int).SetUint64(uint64(i+n)))
+		tmpv := new(big.Int).Add(hvb, new(big.Int).SetUint64(uint64(i)))
+		scalar, err := ComputeChallenge(curve.Params().N, tmpv)
 		if err != nil {
 			panic(err)
 		}

@@ -19,12 +19,17 @@ type VectorBase struct {
 }
 
 // NewVecotrBase creates new instance.
-func NewVecotrBase(gv, hv *GeneratorVector, g, h *ECPoint) *VectorBase {
+func NewVecotrBase(gv, hv *GeneratorVector, g, h, u *ECPoint, bitSize, aggreateSize int, fake bool) *VectorBase {
 	vb := VectorBase{}
 	vb.gv = gv
 	vb.hv = hv
-	vb.h = h
-	vb.g = g
+	vb.h = h.Copy()
+	vb.g = g.Copy()
+	vb.u = u.Copy()
+
+	vb.bitSize = bitSize
+	vb.aggreateSize = aggreateSize
+	vb.fakeTest = fake
 
 	return &vb
 }
@@ -47,22 +52,32 @@ func NewRandomVectorBase(curve elliptic.Curve, bitSize, aggreateSize int) *Vecto
 // NewDefaultVectorBase creates default vector base.
 func NewDefaultVectorBase(curve elliptic.Curve, bitSize, aggreateSize int) *VectorBase {
 	vb := VectorBase{}
-	vb.gv = NewDefaultGV(curve, bitSize*aggreateSize)
-	vb.hv = NewDefaultHV(curve, bitSize*aggreateSize)
+
 	g := "g generator of twisted elg"
 	vb.g = NewECPointByString(g, curve)
 
 	h := "h generator of twisted elg"
 	vb.h = NewECPointByString(h, curve)
 
-	// u := "u generator of innerproduct"
-	// vb.u = NewECPointByString(u, curve)
-	vb.u = vb.g.Copy()
+	vb.gv = NewDefaultGV(curve, bitSize*aggreateSize)
+	vb.hv = NewDefaultHV(curve, bitSize*aggreateSize)
+
+	u := "u generator of innerproduct"
+	vb.u = NewECPointByString(u, curve)
 
 	vb.bitSize = bitSize
 	vb.aggreateSize = aggreateSize
 
 	return &vb
+}
+
+// BitSizeVB .
+func (vb *VectorBase) BitSizeVB() *VectorBase {
+	if vb.aggreateSize == 1 {
+		return vb
+	}
+
+	return NewVecotrBase(vb.GetBitSizeGV(), vb.GetBitSizeHV(), vb.g, vb.h, vb.u, vb.bitSize, 1, false)
 }
 
 // GetH returns public h point.
@@ -80,9 +95,27 @@ func (vb *VectorBase) GetU() *ECPoint {
 	return vb.u
 }
 
+// GetBitSizeHV returns hv with len bitsize.
+func (vb VectorBase) GetBitSizeHV() *GeneratorVector {
+	if vb.aggreateSize == 1 {
+		return vb.GetHV()
+	}
+
+	return vb.GetHV().SubVector(0, vb.bitSize)
+}
+
 // GetHV returns h generator vector.
 func (vb *VectorBase) GetHV() *GeneratorVector {
 	return vb.hv
+}
+
+// GetBitSizeGV returns gv with len bitsize.
+func (vb *VectorBase) GetBitSizeGV() *GeneratorVector {
+	if vb.aggreateSize == 1 {
+		return vb.GetGV()
+	}
+
+	return vb.GetGV().SubVector(0, vb.bitSize)
 }
 
 // GetGV returns g generator vector.

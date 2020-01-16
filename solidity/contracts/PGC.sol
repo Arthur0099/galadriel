@@ -63,6 +63,7 @@ contract PGC {
     uint[4] fromto;
     uint[4] logCt1;
     uint[4] logCt2;
+    uint[6] aggCT;
   }
 
   // pk.x => pk.y => uint(address) => ct encrypt current balance.
@@ -118,6 +119,7 @@ contract PGC {
 
   // events
   event LogDepositAccount(address indexed proxy, address indexed token, uint tox, uint toy, uint amount, uint time);
+  event LogAggTransfer(address indexed proxy, address indexed token, uint[4] fromto, uint[6] ct, uint time);
   event LogTransfer(address indexed proxy, address indexed token, uint[4] fromto, uint[4] ct1, uint[4] ct2, uint time);
   event LogBurn(address indexed proxy, address indexed receiver, address indexed token, uint accountx, uint accounty, uint amount, uint time);
   event LogBurnPart(address indexed proxy, address indexed receiver, address indexed token, uint accountx, uint accounty, uint amount, uint time);
@@ -199,6 +201,84 @@ contract PGC {
   }
 
   /*
+   * points[0-1]: pk1
+   * points[2-3]: pk2
+   * points[4-5]: ct x1
+   * points[6-7]: ct x2
+   * points[8-9]: ct y
+   * points[10-11]: pte A1
+   * points[12-13]: pte A2
+   * points[14-15]: pte B
+   * points[16-17]: pk1's refreshed balance ct.X
+   * points[18-19]: pk1's refreshed balance ct.Y
+   * points[20-21]: ct valid proof A
+   * points[22-23]: ct valid proof B
+   * points[24-25]: dle eq proof A1.
+   * points[26-27]: dle eq proof A2.
+   * points[28-29]: agg range proof A.
+   * points[30-31]: agg range proof S.
+   * points[32-33]: agg range proof T1.
+   * points[34-35]: agg range proof T2.
+
+   * scalar[0]: nonce.
+   * scalar[1]: pte proof z1.
+   * scalar[2]: pte proof z2.
+   * scalar[3]: ct valid z1.
+   * scalar[4]: ct valid z2. 
+   * scalar[5]: dloge proof Z.
+   * scalar[6]: agg range proof t.
+   * scalar[7]: agg range proof tx.
+   * scalar[8]: agg range proof u.
+   * scalar[9]: agg range proof a.
+   * scalar[10]: agg range proof b.
+
+   * l[0-11]: agg range proof l.x, l.y.
+   * r[0-11]: agg range proof r.x, r.y.
+   */
+  function aggTransfer(uint[36] memory points, uint[11] memory scalar, uint[12] memory l, uint [12] memory r) public returns (bool) {
+    Board memory b;
+
+    uint token = 0;
+
+    // 2 add if no pending.
+    (b.userBalance, b.localNonce) = getUserBalance(points[0], points[1], address(0));
+    require(scalar[0] == b.localNonce, "invalid nonce");
+    // check proof.
+    require(pgcVerifier.verifyAggTransfer(points, scalar, l, r, b.userBalance), "transfer proofs invalid");
+
+    // update sender's balance.
+    // 4 add.
+    // b.ct1.X = BN128.G1Point(points[4], points[5]);
+    // b.ct1.Y = BN128.G1Point(points[8], points[9]);
+    // b.tmpUpdatedBalance = getBalanceCanSpentInternal(points[0], points[1], token);
+    // b.tmpUpdatedBalance.X = b.tmpUpdatedBalance.X.add(b.ct1.X.neg());
+    // b.tmpUpdatedBalance.Y = b.tmpUpdatedBalance.Y.add(b.ct1.Y.neg());
+    b.tmpUpdatedBalance.X = BN128.G1Point(points[16], points[17]);
+    b.tmpUpdatedBalance.Y = BN128.G1Point(points[18], points[19]);
+    rolloverAndUpdate(b.tmpUpdatedBalance, points[0], points[1], token);
+
+    // update receiver balance or make it to pending.
+    b.ct2.X = BN128.G1Point(points[6], points[7]);
+    b.ct2.Y = BN128.G1Point(points[8], points[9]);
+    toBalanceOrPending(b.ct2, points[2], points[3], token);
+
+    // set for event.
+    b.fromto[0] = points[0];
+    b.fromto[1] = points[1];
+    b.fromto[2] = points[2];
+    b.fromto[3] = points[3];
+    b.aggCT[0] = points[4];
+    b.aggCT[1] = points[5];
+    b.aggCT[2] = points[6];
+    b.aggCT[3] = points[7];
+    b.aggCT[4] = points[8];
+    b.aggCT[5] = points[9];
+    emit LogAggTransfer(msg.sender, address(token), b.fromto, b.aggCT, now);
+
+    return true;
+  }
+
+  /*
    * @dev transfer from on account to another.
    * sigma proof to prove value in pk1's ct == value pk2's ct
    * dle sigma proof to prove value updated in pk1's ct == value in refreshed pk1's ct
@@ -266,9 +346,12 @@ contract PGC {
     // 4 add.
     b.ct1.X = BN128.G1Point(points[2], points[3]);
     b.ct1.Y = BN128.G1Point(points[4], points[5]);
-    b.tmpUpdatedBalance = getBalanceCanSpentInternal(points[0], points[1], token);
-    b.tmpUpdatedBalance.X = b.tmpUpdatedBalance.X.add(b.ct1.X.neg());
-    b.tmpUpdatedBalance.Y = b.tmpUpdatedBalance.Y.add(b.ct1.Y.neg());
+    // the refreshed balance is checked before, just use it instead.
+    // b.tmpUpdatedBalance = getBalanceCanSpentInternal(points[0], points[1], token);
+    // b.tmpUpdatedBalance.X = b.tmpUpdatedBalance.X.add(b.ct1.X.neg());
+    // b.tmpUpdatedBalance.Y = b.tmpUpdatedBalance.Y.add(b.ct1.Y.neg());
+    b.tmpUpdatedBalance.X = BN128.G1Point(points[20], points[21]);
+    b.tmpUpdatedBalance.Y = BN128.G1Point(points[22], points[23]);
     rolloverAndUpdate(b.tmpUpdatedBalance, points[0], points[1], token);
 
     // update receiver balance or make it to pending.
@@ -415,7 +498,10 @@ contract PGC {
     require(pgcVerifier.verifyBurn(amount, publicKey, proof, z, userBalance), "dle sigma verify failed");
 
     // update user encrypted balance.
-    CT memory tmpUpdatedBalance = encrypt(0, BN128.G1Point(publicKey[0], publicKey[1]));
+    // CT memory tmpUpdatedBalance = encrypt(0, BN128.G1Point(publicKey[0], publicKey[1]));
+    CT memory tmpUpdatedBalance;
+    tmpUpdatedBalance.X = BN128.G1Point(0, 0);
+    tmpUpdatedBalance.Y = BN128.G1Point(0, 0);
     rolloverAndUpdate(tmpUpdatedBalance, publicKey[0], publicKey[1], token);
 
     if (token == 0) {
@@ -441,9 +527,10 @@ contract PGC {
 
     CT memory ct;
     // X = pk * r.
-    ct.X = pk.mul(r);
+    // cause r is set to 0.
+    ct.X = BN128.G1Point(0, 0);
     // Y = g*m + h*r.
-    ct.Y = g.mul(amount).add(h.mul(r));
+    ct.Y = g.mul(amount);
 
     return ct;
   }

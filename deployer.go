@@ -52,6 +52,9 @@ func MustDeployContract(name string, auth *bind.TransactOpts, client *ethclient.
 	case "rangeProofVerifier":
 		ABI = contracts.RangeproofverifierABI
 		BIN = contracts.RangeproofverifierBin
+	case "aggRangeProofVerifier":
+		ABI = contracts.AggrangeproofverifierABI
+		BIN = contracts.AggrangeproofverifierBin
 	case "tokenConverter":
 		ABI = contracts.TokenconverterABI
 		BIN = contracts.TokenconverterBin
@@ -146,6 +149,7 @@ func DeployToken(auth *bind.TransactOpts, client *ethclient.Client) (*contracts.
 
 	tokenAddr, tokenTx, token, err := contracts.DeployToken(auth, client)
 	if err != nil {
+		log.Error("deploy token contract failed", "err", err)
 		panic(err)
 	}
 	log.Debug("deploy token contracts", "address", tokenAddr.Hex(), "tx", tokenTx.Hash().Hex())
@@ -193,8 +197,11 @@ func DeployPGCContracts(auth *bind.TransactOpts, client *ethclient.Client) *Cont
 	tokenConverter, _, _ := MustDeployContract("tokenConverter", auth, client)
 	c.TokenConverter, _ = contracts.NewTokenconverter(tokenConverter, client)
 
+	// deploy agg range proof verifier.
+	aggRangeVerifier, _, _ := MustDeployContract("aggRangeProofVerifier", auth, client, params)
+
 	// deploy pgc verifyer.
-	pgcVerifier, _, _ := MustDeployContract("pgcVerifier", auth, client, params, dleSigmaVerifier, rangeVerifier, sigmaVerifier)
+	pgcVerifier, _, _ := MustDeployContract("pgcVerifier", auth, client, params, dleSigmaVerifier, rangeVerifier, aggRangeVerifier, sigmaVerifier)
 
 	// deploy pgc contract
 	pgcCon, _, _ := MustDeployContract("pgc", auth, client, params, pgcVerifier, tokenConverter)

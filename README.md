@@ -90,7 +90,7 @@ transfer:
 1. mul: 40000 gas; add: 600 gas.
 
 2. transfer 共用了1次sigma, 1次dlesigma, 2次range: **194 mul, 185 add**,总共消耗gas**9182528**(曲线消耗**7871000**, 其余消耗**1311528**)
-3. zether 1次sigma,2次range, 154 mul, 156 add. (曲线消耗**6253600**, 总共**718.8万**, 其余消耗**934400**)
+3. zether 1次sigma, 2次range, 154 mul, 156 add. (曲线消耗**6253600**, 总共**718.8万**, 其余消耗**934400**)
 
 使用分叉后:
 mul: 6000 gas; add: 150 gas.
@@ -107,16 +107,64 @@ gas:**2162394**(曲线消耗**442200**, 其余消耗**1720194**)
 
 # 最新对比
 
-zether transfer(32bit):
-* gascost: 7188k.
-* eccost: 6455k.
-* tx: 1472bytes.
+gas cost 可能跟数据量有关, 需对点压缩后进行对比, 需要对所有输入进行修改, 要整体调整.
 
+pgc:
+* transfer
+  * gas cost: 8282015
+  * ec cost: 6695400(165 mul, 159 add)
+  * 其他cost: 1586615
+  * bytes: 2276
+* burn
+  * gas cost: 390134
+  * ec cost: 321800(8 mul, 3 add, sig and proof)
+  * bytes: 420
+* deposit/fund
+  * gas cost: 132311
+  * ec cost: 40000(1 mul)
+  * bytes: 128
 
-pgc transfer(32bit);
-* gascost: 9183k.
-* eccost: 7871k.
-* tx: 3268bytes(未对点进行压缩优化).
+## transfer
 
+(165 mul, 159 add, 6695400 gas)
 
-// 
+### 其他
+
+(4 add, 2400)
+
+* verifyDLESigmaProof时, 根据链上的balance计算出更新后的balance, 进行验证: 2 add.
+* 更新receiver balance: 2 add.
+
+### verify pte proof
+
+(7 mul, 4 add, 282400)
+
+* check pk1 * z1 == A1 + X1 * e: 2 mul, 1 add.
+* check pk2 * z1 == A2 + X2 * e: 2 mul, 1 add.
+* Check h * z1 + g * z2 == B + Y * e: 3 mul, 2 add.
+
+### verify DLE SigmaProof
+
+(4 mul, 2 add, 161200)
+
+* g1^z == h1^e+A1: 2 mul, 1 add.
+* g2^z == h2^e+A2: 2 mul, 1 add.
+
+### verify CT Valid Proof(z1, z2与pte中变量不一致)
+
+(5 mul, 3 add, 201800)
+
+* pk1*z1 = A + X*e: 2 mul, 1 add.
+* g*z2 + h*z1 = B + Y*e: 3 mul, 2 add.
+
+### 聚合bulletproof
+
+lrSize: 6.
+
+ec分布(149 mul, 146 add, 曲线消耗gas: 6047600):
+* A+s*-x: 1 mul, 1 add.
+* li * xi^2 + ri * xi^-2: 12 mul, 12 add.
+* g*(tx-dleta) + h*t ?= v*(z^2 * z^m) + T1*x + T2*x^2: 6 mul, 4 add.
+* check bullet proof(105): 
+  * commit: 2*(vectorSize mul, vectorSize - 1 add): 128 mul, 126 add. (g^l, h^r)
+  * normal: 3 add, 2 mul

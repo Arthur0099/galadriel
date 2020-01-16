@@ -36,17 +36,4 @@ func TestRangeProof(t *testing.T) {
 		t.Error("failed")
 		return
 	}
-
-	// v = params.Max()
-	// v.Add(v, one)
-	// p = new(ECPoint).ScalarMult(g, v)
-	// p.Add(p, new(ECPoint).ScalarMult(h, r))
-	// proof, err = GenerateRangeProof(vb, v, r)
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-
-	// if VerifyRangeProof(vb, p, proof) {
-	// 	t.Fatal("failed")
-	// }
 }

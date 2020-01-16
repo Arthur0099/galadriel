@@ -5,6 +5,7 @@ import "./DLESigmaVerifier.sol";
 import "./PublicParams.sol";
 import "./RangeProofVerifier.sol";
 import "./SigmaVerifier.sol";
+import "./AggRangeProofVerifier.sol";
 
 // response for verifying all proofs.
 contract PGCVerifier {
@@ -28,6 +29,9 @@ contract PGCVerifier {
   // range proof verifier.
   RangeProofVerifier public rangeProofVerifier;
 
+  // agg range proof verifier.
+  AggRangeProofVerifier public aggRangeProofVerifier;
+
   // sigma verifier.
   SigmaVerifier public sigmaVerifier;
 
@@ -45,6 +49,8 @@ contract PGCVerifier {
     // for tmp calculation.
     uint i;
     uint[20] sigmaPoints;
+    uint[16] ptePoints;
+    uint[10] ctValidPoints;
     CT ct1;
     CT ct2;
     uint[4] ct1Points;
@@ -60,9 +66,12 @@ contract PGCVerifier {
     // to call verify contract.
     uint[4] proof;
     uint[10] rpoints;
+    uint[12] aggRpoints;
     uint[5] rscalar;
     uint[2*n] l;
     uint[2*n] r;
+    uint[12] ll;
+    uint[12] rr;
 
     // for log event.
     uint[4] fromto;
@@ -70,11 +79,12 @@ contract PGCVerifier {
     uint[4] logCt2;
   }
 
-  constructor(address params_, address dleSigmaVerifier_, address rangeProofVerifier_, address sigmaVerifier_) public {
+  constructor(address params_, address dleSigmaVerifier_, address rangeProofVerifier_, address aggVerifier_, address sigmaVerifier_) public {
     params = PublicParams(params_);
     dleSigmaVerifier = DLESigmaVerifier(dleSigmaVerifier_);
     rangeProofVerifier = RangeProofVerifier(rangeProofVerifier_);
     sigmaVerifier = SigmaVerifier(sigmaVerifier_);
+    aggRangeProofVerifier = AggRangeProofVerifier(aggVerifier_);
 
     uint[2] memory tmpH = params.getH();
     uint[2] memory tmpG = params.getG();
@@ -84,6 +94,66 @@ contract PGCVerifier {
     g.X = tmpG[0];
     g.Y = tmpG[1];
     require(bitSize == params.getBitSize(), "bitsize not equal");
+  }
+
+  //
+  function verifyAggTransfer(uint[36] memory points, uint[11] memory scalar, uint[12] memory l, uint [12] memory r, uint[4] memory ub) public returns(bool) {
+    CT memory userBalance;
+    userBalance.X.X = ub[0];
+    userBalance.X.Y = ub[1];
+    userBalance.Y.X = ub[2];
+    userBalance.Y.Y = ub[3];
+
+    Board memory b;
+    for (b.i = 0; b.i < 16; b.i++) {
+      b.ptePoints[b.i] = points[b.i];
+    }
+    // verify pte proof.
+    // pk1, pk2, ct enc. pte proof.
+    // // 7 mul, 4 add.
+    require(sigmaVerifier.verifyPTEProof(b.ptePoints, scalar[1], scalar[2]), "pte equal proof invalid");
+
+    b.ct1.X = BN128.G1Point(points[4], points[5]);
+    b.ct1.Y = BN128.G1Point(points[8], points[9]);
+    // verify dle proof.
+    // 2 add.
+    // get tmp balance = alice'balnce - transfer'balance
+    b.tmpUpdatedBalance.X = userBalance.X.add(b.ct1.X.neg());
+    b.tmpUpdatedBalance.Y = userBalance.Y.add(b.ct1.Y.neg());
+    b.refreshBalance.X = BN128.G1Point(points[16], points[17]);
+    b.refreshBalance.Y = BN128.G1Point(points[18], points[19]);
+    b.dleSigmaPoints[0] = BN128.G1Point(points[24], points[25]);
+    b.dleSigmaPoints[1] = BN128.G1Point(points[26], points[27]);
+    // only this failed.
+    // 4 mul, 4 add.
+    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[5]), "dle sigma proof failed");
+
+    // verifyCTValidProof.
+    b.ctValidPoints[0] = points[0];
+    b.ctValidPoints[1] = points[1];
+    for (b.i = 16; b.i < 24; b.i++) {
+      b.ctValidPoints[2+b.i-16] = points[b.i];
+    }
+    require(sigmaVerifier.verifyCTValidProof(b.ctValidPoints, scalar[3], scalar[4]), "ct valid proof invalid");
+
+    for (b.i = 0; b.i < 8; b.i++) {
+      b.aggRpoints[b.i] = points[28+b.i];
+    }
+    // set commitments.
+    // transfer y.
+    b.aggRpoints[8] = points[8];
+    b.aggRpoints[9] = points[9];
+
+    // pk1's refreshed balance.
+    b.aggRpoints[10] = points[18];
+    b.aggRpoints[11] = points[19];
+    for (b.i = 0; b.i < 5; b.i++) {
+      b.rscalar[b.i] = scalar[b.i+6];
+    }
+    // verify agg range proof.
+    require(aggRangeProofVerifier.aggVerifyRangeProof(b.aggRpoints, b.rscalar, l, r), "aggrate range proof invalid");
+
+    return true;
   }
 
   /*
@@ -168,7 +238,6 @@ contract PGCVerifier {
     b.refreshBalance.Y = BN128.G1Point(points[22], points[23]);
     b.dleSigmaPoints[0] = BN128.G1Point(points[24], points[25]);
     b.dleSigmaPoints[1] = BN128.G1Point(points[26], points[27]);
-    // only this failed.
     // 4 mul, 4 add.
     require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[3]), "dle sigma proof failed");
 
@@ -375,5 +444,9 @@ contract PGCVerifier {
     board.dleTmpPoints[11] = pk.Y;
 
     return dleSigmaVerifier.verifyDLESigmaProof(board.dleTmpPoints, z);
+  }
+
+  function computeChallenge(uint a, uint b, uint c, uint d) internal pure returns(uint) {
+    return uint(keccak256(abi.encodePacked(a, b, c, d))).mod();
   }
 }

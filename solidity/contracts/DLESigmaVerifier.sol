@@ -30,6 +30,7 @@ contract DLESigmaVerifier {
     check1[3] = points[1];
     check1[4] = points[6];
     check1[5] = points[7];
+    // g1^z == h1^e+A1
     if (!checkDLESigmaProofBn128(check1, z, e)) {
         return false;
     }
@@ -41,6 +42,7 @@ contract DLESigmaVerifier {
     check2[3] = points[3];
     check2[4] = points[10];
     check2[5] = points[11];
+    // g2^z == h2^e+A2
     if (!checkDLESigmaProofBn128(check2, z, e)) {
         return false;
     }
@@ -74,6 +76,10 @@ contract DLESigmaVerifier {
   /*
    * @dev 2 mul, 1 add.
    */
+  // check g^z == h*e+A.
+  // points[0-1]: g
+  // points[2-3]: A
+  // points[4-5]: h
   function checkDLESigmaProofBn128(uint[6] memory points, uint z, uint e) internal view returns(bool) {
     BN128.G1Point memory g = BN128.G1Point(points[0], points[1]);
     BN128.G1Point memory A = BN128.G1Point(points[2], points[3]);
@@ -88,4 +94,6 @@ contract DLESigmaVerifier {
   function computeChallenge(uint a, uint b, uint c, uint d) internal pure returns(uint) {
     return uint(keccak256(abi.encodePacked(a, b, c, d))).mod();
   }
+
+  //
 }

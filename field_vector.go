@@ -147,6 +147,19 @@ func (f *FieldVector) GetVector() []*big.Int {
 	return newItems
 }
 
+// AllItemsSub returns a new field vector whose items = ori item - d mod n.
+func (f *FieldVector) AllItemsSub(d *big.Int) *FieldVector {
+	newItems := make([]*big.Int, 0)
+	for _, item := range f.items {
+		newItem := new(big.Int).Sub(item, d)
+		newItem.Mod(newItem, f.n)
+
+		newItems = append(newItems, newItem)
+	}
+
+	return newFieldVector(newItems, new(big.Int).Set(f.n))
+}
+
 // AllItemsSubOne returns a new field vector whose items = ori item - 1 mod n.
 func (f *FieldVector) AllItemsSubOne() *FieldVector {
 	newItems := make([]*big.Int, 0)

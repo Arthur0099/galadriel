@@ -76,13 +76,11 @@ func VerifyPTEqualityProof(pk1, pk2 *ecdsa.PublicKey, ct *MRTwistedELGamalCTPub,
 		log.Warn("verify pteequality proof failed(compute challenge)", "err", err)
 		return false
 	}
-
 	// check pk1 * z1 == A1 + X1 * e.
 	if !checkTwistedELGamalCTX(new(ECPoint).SetFromPublicKey(pk1), proof.A1, ct.X1, proof.Z1, e) {
 		return false
 	}
-
-	// check pk2 * z2 == A2 + X2 * e.
+	// check pk2 * z1 == A2 + X2 * e.
 	if !checkTwistedELGamalCTX(new(ECPoint).SetFromPublicKey(pk2), proof.A2, ct.X2, proof.Z1, e) {
 		return false
 	}

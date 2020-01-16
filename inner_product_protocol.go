@@ -176,6 +176,25 @@ func (ipVerifier *IPVerifier) VerifyIPProof(g, h *GeneratorVector, p *ECPoint, c
 	return ipVerifier.verifyIPProof(g, h, ue, np, proof)
 }
 
+func (ipVerifier *IPVerifier) optVerifyIPProof(g, h *GeneratorVector, p *ECPoint, c *big.Int, proof *IPProof) bool {
+	curve := p.Curve
+	n := curve.Params().N
+	// todo:
+	e, err := ComputeChallenge(n, c)
+	if err != nil {
+		log.Warn("IPVerifier compute challenge failed in protocol 1", "error", err)
+		return false
+	}
+
+	// compute newPoint.
+	// p' = p + u * (e * c)
+	ue := new(ECPoint).ScalarMult(ipVerifier.U, e)
+	np := new(ECPoint).ScalarMult(ue, c)
+	np.Add(np, p)
+
+	return ipVerifier.optmizedVerifyIPProof(g, h, ue, np, proof)
+}
+
 // verifyIPProof validates inner product proof.
 func (ipVerifier *IPVerifier) verifyIPProof(g, h *GeneratorVector, u, p *ECPoint, proof *IPProof) bool {
 	curve := u.Curve
@@ -247,4 +266,65 @@ func (ipVerifier *IPVerifier) verifyIPProof(g, h *GeneratorVector, u, p *ECPoint
 	}
 
 	return true
+}
+
+//
+func (ipVerifier *IPVerifier) optmizedVerifyIPProof(g, h *GeneratorVector, u, p *ECPoint, proof *IPProof) bool {
+	curve := u.Curve
+	n := curve.Params().N
+
+	right := p.Copy()
+	xjs := make([]*big.Int, 0)
+	xjsInv := make([]*big.Int, 0)
+	for i := 0; i < len(proof.L); i++ {
+		xj, err := ComputeChallenge(n, proof.L[i].X, proof.L[i].Y, proof.R[i].X, proof.R[i].Y)
+		if err != nil {
+			log.Warn("compute challenge for optimize inner product failed", "err", err)
+			return false
+		}
+		xjInv := new(big.Int).ModInverse(xj, n)
+		xjs = append(xjs, xj)
+		xjsInv = append(xjsInv, xjInv)
+
+		xj2 := new(big.Int).Mul(xj, xj)
+		xj2.Mod(xj2, n)
+
+		xj2Inv := new(big.Int).Mul(xjInv, xjInv)
+		xj2Inv.Mod(xj2Inv, n)
+
+		right.Add(right, new(ECPoint).ScalarMult(proof.L[i], xj2))
+		right.Add(right, new(ECPoint).ScalarMult(proof.R[i], xj2Inv))
+	}
+
+	left := u.Copy()
+	ab := new(big.Int).Mul(proof.a, proof.b)
+	ab.Mod(ab, n)
+	left.ScalarMult(left, ab)
+
+	s := make([]*big.Int, g.Size())
+
+	for i := 0; i < g.Size(); i++ {
+		for j := 0; j < len(proof.L); j++ {
+			tmp := new(big.Int)
+			if smallParseBinary(i, j, len(proof.L)) {
+				tmp.Set(xjs[j])
+			} else {
+				tmp.Set(xjsInv[j])
+			}
+
+			if j == 0 {
+				s[i] = tmp
+			} else {
+				s[i].Mul(s[i], tmp)
+				s[i].Mod(s[i], n)
+			}
+		}
+	}
+
+	as := newFieldVector(s, n).Times(proof.a).GetVector()
+	left.Add(left, g.Commit(as))
+	bsinv := newFieldVector(s, n).ModInverse().Times(proof.b).GetVector()
+	left.Add(left, h.Commit(bsinv))
+
+	return left.Equal(right)
 }

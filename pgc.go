@@ -117,7 +117,7 @@ func CreateCTX(alice *Account, bob *ecdsa.PublicKey, v *big.Int) (*CTX, error) {
 	}
 	ctx.equalityProof = equalityProof
 	// generate range proof v in range.
-	rangeProof1, err := GenerateRangeProof(params.GetVB(), v, c1.R)
+	rangeProof1, err := GenerateRangeProof(params.GetVB().BitSizeVB(), v, c1.R)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func CreateCTX(alice *Account, bob *ecdsa.PublicKey, v *big.Int) (*CTX, error) {
 	ctx.dleProof = dleProof
 
 	// generate proof to prove the refreshUpdatedBalance in right range.
-	rangeProof2, err := GenerateRangeProof(params.GetVB(), new(big.Int).Sub(alice.m, v), refreshUpdatedBalance.R)
+	rangeProof2, err := GenerateRangeProof(params.GetVB().BitSizeVB(), new(big.Int).Sub(alice.m, v), refreshUpdatedBalance.R)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func CreateBurnPartTx(alice *Account, amount *big.Int) (*BurnPartTx, error) {
 	burnPartTx.dleProof1 = dleProof1
 
 	// generate proof.
-	proof1, err := GenerateRangeProof(params.GetVB(), amount, ct.R)
+	proof1, err := GenerateRangeProof(params.GetVB().BitSizeVB(), amount, ct.R)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +214,7 @@ func CreateBurnPartTx(alice *Account, amount *big.Int) (*BurnPartTx, error) {
 		return nil, err
 	}
 	burnPartTx.dleProof2 = dleProof2
-	proof2, err := GenerateRangeProof(params.GetVB(), new(big.Int).Sub(alice.m, amount), refreshBalance.R)
+	proof2, err := GenerateRangeProof(params.GetVB().BitSizeVB(), new(big.Int).Sub(alice.m, amount), refreshBalance.R)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func VerifyCTX(ctx *CTX) bool {
 		return false
 	}
 
-	if !VerifyRangeProof(params.GetVB(), ctx.c1.Y, ctx.rangeProof1) {
+	if !VerifyRangeProof(params.GetVB().BitSizeVB(), ctx.c1.Y, ctx.rangeProof1) {
 		log.Warn("range proof for transfer v failed")
 		return false
 	}
@@ -247,7 +247,7 @@ func VerifyCTX(ctx *CTX) bool {
 		return false
 	}
 
-	if !VerifyRangeProof(params.GetVB(), ctx.refreshUpdatedBalance.Y, ctx.rangeProof2) {
+	if !VerifyRangeProof(params.GetVB().BitSizeVB(), ctx.refreshUpdatedBalance.Y, ctx.rangeProof2) {
 		log.Warn("range proof for refreshed balance failed")
 		return false
 	}

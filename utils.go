@@ -163,7 +163,7 @@ func Delta(y, z, order *big.Int, n int) *big.Int {
 	return res
 }
 
-// DeltaMN represents (z - z^2) * <1^mn, y^mn> - z^(j+1) * <1^n, 2^n>. (j is [1, m])
+// DeltaMN represents (z - z^2) * <1^mn, y^mn> - z^(j+2) * <1^n, 2^n>. (j is [1, m])
 func DeltaMN(y, z, order *big.Int, m, n int) *big.Int {
 	zSquare := new(big.Int).Exp(z, two, order)
 	res := new(big.Int).Sub(z, zSquare)

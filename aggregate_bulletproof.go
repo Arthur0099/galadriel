@@ -288,13 +288,14 @@ func VerifyAggreateBulletProof(vb *VectorBase, v []*ECPoint, proof *AggreateBull
 
 	actual := new(ECPoint).ScalarMult(g, proof.t)
 	actual.Add(actual, new(ECPoint).ScalarMult(h, proof.tx))
+
 	if !expect.Equal(actual) {
 		log.Warn("point not equal", "expect x", expect.X, "expect y", expect.Y, "actual x", actual.X, "actual y", actual.Y)
 		return false
 	}
 
 	hPrime := vb.GetHV().Hadamard(ymn.ModInverse().GetVector())
-	// compute p point. p = A + S*x + gv*-z + h'*(z*y^mn) + hj'^(z^j+1 * z^n). (hj=h'[(j-1)*n:j*n-1], j=[1, m])
+	// compute p point. p = A + S*x + gv*-z + h'*(z*y^mn) + hj'^(z^j+1 * 2^n). (hj=h'[(j-1)*n:j*n-1], j=[1, m])
 	p := proof.A.Copy()
 	p.Add(p, new(ECPoint).ScalarMult(proof.S, x))
 	p.Add(p, new(ECPoint).ScalarMult(vb.GetGV().Sum(), zNeg))
@@ -314,5 +315,222 @@ func VerifyAggreateBulletProof(vb *VectorBase, v []*ECPoint, proof *AggreateBull
 	ipVerifier := IPVerifier{}
 	ipVerifier.U = vb.GetU()
 
-	return ipVerifier.VerifyIPProof(vb.GetGV(), hPrime, newP, proof.t, proof.ipProof)
+	//
+	// return ipVerifier.VerifyIPProof(vb.GetGV(), hPrime, newP, proof.t, proof.ipProof)
+	return ipVerifier.optVerifyIPProof(vb.GetGV(), hPrime, newP, proof.t, proof.ipProof)
+}
+
+func optimizedAggVerify(vb *VectorBase, v []*ECPoint, proof *AggreateBulletProof) bool {
+	curve := vb.GetCurve()
+	n := curve.Params().N
+	m := vb.GetAggreateSize()
+	size := vb.GetVectorSize()
+	bitSize := vb.GetBitSize()
+	y, err := ComputeChallenge(n, proof.A.X, proof.A.Y, proof.S.X, proof.S.Y)
+	if err != nil {
+		log.Warn("compute challenge y failed", "error", err)
+		return false
+	}
+	ymnInverse := PowVector(new(big.Int).ModInverse(y, n), n, size)
+
+	z, err := ComputeChallenge(n, y)
+	if err != nil {
+		log.Warn("compute challenge z failed", "error", err)
+		return false
+	}
+	zNeg := new(big.Int).Neg(z)
+	zNeg.Mod(zNeg, n)
+	zSquare := new(big.Int).Exp(z, two, n)
+
+	x, err := ComputeChallenge(n, proof.T1.X, proof.T1.Y, proof.T2.X, proof.T2.Y)
+	if err != nil {
+		log.Warn("compute challenge x failed", "error", err)
+		return false
+	}
+	x2 := new(big.Int).Exp(x, two, n)
+
+	h := vb.GetH()
+	g := vb.GetG()
+
+	// check g*tx + h*t ?= v*(z^2 * z^m) + g*dleta + T1*x + T2*x^2. (z^m is a vector)
+	zm := PowVector(z, n, m).Times(zSquare)
+	expect := NewGeneratorVector(v).Commit(zm.GetVector())
+
+	expect.Add(expect, new(ECPoint).ScalarMult(proof.T1, x))
+	expect.Add(expect, new(ECPoint).ScalarMult(proof.T2, x2))
+	dleta := DeltaMN(y, z, n, m, bitSize)
+	expect.Add(expect, new(ECPoint).ScalarMult(g, dleta))
+
+	actual := new(ECPoint).ScalarMult(g, proof.t)
+	actual.Add(actual, new(ECPoint).ScalarMult(h, proof.tx))
+	if !expect.Equal(actual) {
+		log.Warn("point not equal", "expect x", expect.X, "expect y", expect.Y, "actual x", actual.X, "actual y", actual.Y)
+		return false
+	}
+
+	right := new(ECPoint).ScalarMult(proof.S, x)
+	right.Add(right, proof.A)
+
+	xj := make([]*big.Int, 0)
+	xj2 := make([]*big.Int, 0)
+	xj2Inv := make([]*big.Int, 0)
+
+	for i := 0; i < len(proof.ipProof.L); i++ {
+		l := proof.ipProof.L[i]
+		r := proof.ipProof.R[i]
+		tmpx, err := ComputeChallenge(n, l.X, l.Y, r.X, r.Y)
+		if err != nil {
+			log.Warn("compute challenge for l, r failed", "err", err)
+			return false
+		}
+
+		xj = append(xj, tmpx)
+		tmpx2 := new(big.Int).Mul(tmpx, tmpx)
+		tmpx2.Mod(tmpx2, n)
+		xj2 = append(xj2, tmpx2)
+
+		tmpx2Inv := new(big.Int).ModInverse(tmpx2, n)
+		xj2Inv = append(xj2Inv, tmpx2Inv)
+
+		tmpp := new(ECPoint).ScalarMult(l, tmpx2)
+		right.Add(right, tmpp)
+		tmpp = new(ECPoint).ScalarMult(r, tmpx2Inv)
+		right.Add(right, tmpp)
+	}
+
+	// scalar mul, add.
+	tl := make([]*big.Int, size)
+	tr := make([]*big.Int, size)
+	rl := make([]*big.Int, size)
+	ll := make([]*big.Int, size)
+
+	challengeLen := len(proof.ipProof.L)
+	n2 := PowVector(new(big.Int).SetUint64(2), n, bitSize)
+	for i := 0; i < size; i++ {
+		if i == 0 {
+			for j := 0; j < len(proof.ipProof.L); j++ {
+				if j == 0 {
+					tl[i] = new(big.Int).Set(xj[j])
+				} else {
+					tl[i].Mul(tl[i], xj[j])
+					tl[i].Mod(tl[i], n)
+				}
+
+			}
+
+			tr[i] = new(big.Int).Set(tl[i])
+			tl[i] = tl[i].ModInverse(tl[i], n)
+		} else {
+			//todo:Computing scalars optimize.
+			k := getBiggestPos(i, challengeLen) //;
+			tl[i] = new(big.Int).Mul(tl[i-pow(k-1)], xj2[challengeLen-k])
+			tl[i].Mod(tl[i], n)
+
+			tr[i] = new(big.Int).Mul(tr[i-pow(k-1)], xj2Inv[challengeLen-k])
+			tr[i].Mod(tr[i], n)
+		}
+
+		ll[i] = new(big.Int).Set(tl[i])
+		rl[i] = new(big.Int).Set(tr[i])
+
+		ll[i] = ll[i].Mul(ll[i], proof.ipProof.a)
+		ll[i].Mod(ll[i], n)
+		ll[i].Add(ll[i], z)
+		ll[i].Mod(ll[i], n)
+
+		rl[i] = rl[i].Mul(rl[i], proof.ipProof.b)
+		rl[i].Mod(rl[i], n)
+
+		zj := new(big.Int).Exp(z, new(big.Int).SetUint64(uint64(i/bitSize+2)), n)
+
+		index := i % bitSize
+		zjn2 := new(big.Int).Mul(zj, n2.Get(index))
+		zjn2.Mod(zjn2, n)
+		rl[i].Sub(rl[i], zjn2)
+		rl[i].Mod(rl[i], n)
+		rl[i].Mul(rl[i], ymnInverse.Get(i))
+		rl[i].Mod(rl[i], n)
+		rl[i].Sub(rl[i], z)
+		rl[i].Mod(rl[i], n)
+	}
+
+	// normal cal/
+	// for i := 0; i < size; i++ {
+	// 	for j := 0; j < challengeLen; j++ {
+	// 		tmp := new(big.Int)
+
+	// 		if smallParseBinary(i, j, challengeLen) {
+
+	// 			tmp = new(big.Int).Set(xj[j])
+	// 		} else {
+
+	// 			tmp = new(big.Int).ModInverse(xj[j], n)
+	// 		}
+
+	// 		if j == 0 {
+	// 			ll[i] = new(big.Int).Set(tmp)
+	// 		} else {
+	// 			ll[i] = ll[i].Mul(ll[i], tmp)
+	// 			ll[i].Mod(ll[i], n)
+	// 		}
+	// 	}
+
+	// 	rl[i] = new(big.Int).ModInverse(ll[i], n)
+
+	// 	// li = a * s + z.
+	// 	ll[i].Mul(ll[i], proof.ipProof.a)
+	// 	ll[i].Mod(ll[i], n)
+	// 	ll[i].Add(ll[i], z)
+	// 	ll[i].Mod(ll[i], n)
+
+	// 	// at this time correct.
+
+	// 	// ri = b *
+	// 	rl[i] = rl[i].Mul(rl[i], proof.ipProof.b)
+	// 	rl[i].Mod(rl[i], n)
+	// 	zj := new(big.Int).Exp(z, new(big.Int).SetUint64(uint64(i/bitSize+2)), n)
+
+	// 	index := i % bitSize
+	// 	zjn2 := new(big.Int).Mul(zj, n2.Get(index))
+	// 	zjn2.Mod(zjn2, n)
+	// 	rl[i].Sub(rl[i], zjn2)
+	// 	rl[i].Mod(rl[i], n)
+	// 	rl[i].Mul(rl[i], ymnInverse.Get(i))
+	// 	rl[i].Mod(rl[i], n)
+	// 	rl[i].Sub(rl[i], z)
+	// 	rl[i].Mod(rl[i], n)
+	// }
+
+	xu, err := ComputeChallenge(n, proof.t)
+	if err != nil {
+		log.Warn("compute challenge for xu failed", "err", err)
+		return false
+	}
+
+	gv := vb.GetGV()
+	hv := vb.GetHV()
+
+	left := gv.Commit(ll)
+	left.Add(left, hv.Commit(rl))
+	uBase := vb.GetU()
+	// xu(ab-t)
+	xabt := new(big.Int).Mul(proof.ipProof.a, proof.ipProof.b)
+	xabt.Mod(xabt, n)
+	xabt.Sub(xabt, proof.t)
+	xabt.Mod(xabt, n)
+	xabt.Mul(xabt, xu)
+	xabt.Mod(xabt, n)
+
+	left.Add(left, new(ECPoint).ScalarMult(uBase, xabt))
+	left.Add(left, new(ECPoint).ScalarMult(h, proof.u))
+
+	return left.Equal(right)
+}
+
+// i start from 0.
+func getJ(i, bitSize int) int {
+	// 0-bitSize-1: 1.
+	// bitSize-2*bitSize-1: 2
+	// ...
+	return i/bitSize + 1
 }

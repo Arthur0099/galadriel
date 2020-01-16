@@ -18,15 +18,18 @@ contract PublicParams {
   uint public constant bitSize = 32;
   // 2^n=bitSize; n is the number of ecpoints in innerproduct.
   uint public constant n = 5;
+  // aggSize for agg range proof. must be pow of 2.
+  uint public constant aggSize = 2;
 
   // fix point used in inner product.
   BN128.G1Point public u;
 
   // g vector generator used in range proof.
-  BN128.G1Point[bitSize] public gVector;
+  BN128.G1Point[bitSize*aggSize] public gVector;
   // h vector generator used in range proof.
-  BN128.G1Point[bitSize] public hVector;
+  BN128.G1Point[bitSize*aggSize] public hVector;
 
+  // 在实际使用时, 应该在创建合约时, 由外部系统直接传入. 保证隐私
   constructor() public {
     // set h generator.
     // this should be the first step to set which will be used to
@@ -36,9 +39,7 @@ contract PublicParams {
 
     g = generatePointByString("g generator of twisted elg");
     h = generatePointByString("h generator of twisted elg");
-    // set u same with h.
-    u.X = g.X;
-    u.Y = g.Y;
+    u = generatePointByString("u generator of innerproduct");
 
     initVector();
   }
@@ -46,13 +47,16 @@ contract PublicParams {
   // init public gv/hv of protocol.
   function initVector() internal {
     uint scalar;
-    for (uint i = 0; i < bitSize; i++) {
-      scalar = uint(keccak256(abi.encodePacked(i))).mod();
+
+    uint gvb = uint(keccak256(abi.encodePacked("gvs"))).mod();
+    for (uint i = 0; i < bitSize*aggSize; i++) {
+      scalar = uint(keccak256(abi.encodePacked(gvb+i))).mod();
       gVector[i] = gBase.mul(scalar);
     }
 
-    for (uint j = 0; j < bitSize; j++) {
-      scalar = uint(keccak256(abi.encodePacked(j+bitSize))).mod();
+    uint hvb = uint(keccak256(abi.encodePacked("hvs"))).mod();
+    for (uint j = 0; j < bitSize*aggSize; j++) {
+      scalar = uint(keccak256(abi.encodePacked(j+hvb))).mod();
       hVector[j] = gBase.mul(scalar);
     }
   }
@@ -78,6 +82,26 @@ contract PublicParams {
     uint[2] memory res;
     res[0] = u.X;
     res[1] = u.Y;
+    return res;
+  }
+
+  // return aggGV.
+  function getAggGVector() public view returns(uint[bitSize*aggSize*2] memory) {
+    uint[bitSize*aggSize*2] memory res;
+    for (uint i = 0; i < bitSize*aggSize; i++) {
+      res[2*i] = gVector[i].X;
+      res[2*i+1] = gVector[i].Y;
+    }
+    return res;
+  }
+
+  // return aggHV.
+  function getAggHVector() public view returns(uint[bitSize*aggSize*2] memory) {
+    uint[bitSize*aggSize*2] memory res;
+    for (uint i = 0; i < bitSize*aggSize; i++) {
+      res[2*i] = hVector[i].X;
+      res[2*i+1] = hVector[i].Y;
+    }
     return res;
   }
 

@@ -37,6 +37,9 @@ var contractsName = []map[string]string{
 		"name": "RangeProofVerifier",
 	},
 	{
+		"name": "AggRangeProofVerifier",
+	},
+	{
 		"name": "SigmaVerifier",
 	},
 	{
