@@ -144,7 +144,7 @@ func init() {
 
 	params.curve = curve
 	params.bitSize = 32
-	params.aggreateSize = 2
+	params.aggreateSize = 1
 
 	params.vb = NewDefaultVectorBase(curve, params.bitSize, params.aggreateSize)
 }

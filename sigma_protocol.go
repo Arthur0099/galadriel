@@ -258,7 +258,7 @@ func (dleProof *DLESigmaProof) Persist(path string) {
 }
 
 // GenerateDLESigmaProof generates zero knowledge proof to prove two ciphertexts encrypt the same value under same public key.
-func GenerateDLESigmaProof(ori, refresh *CTEncPoint, sk *ecdsa.PrivateKey) (*DLESigmaProof, error) {
+func GenerateDLESigmaProof(ori, refresh *CTEncPoint, sk *ecdsa.PrivateKey, customs ...*big.Int) (*DLESigmaProof, error) {
 	// g1 = Y(fresh) - Y(ori)
 	g1 := new(ECPoint).Sub(refresh.Y, ori.Y)
 	// h1 = X(fresh) - X(ori)
@@ -270,22 +270,22 @@ func GenerateDLESigmaProof(ori, refresh *CTEncPoint, sk *ecdsa.PrivateKey) (*DLE
 	h2 := new(ECPoint).SetFromPublicKey(&sk.PublicKey)
 	// witness = sk.
 	w := new(big.Int).Set(sk.D)
-	return generateDLESimaProof(g1, h1, g2, h2, w)
+	return generateDLESimaProof(g1, h1, g2, h2, w, customs...)
 }
 
 // GenerateEqualProof generates a proof to prove amount is same with value in encrypted ct.
-func GenerateEqualProof(amount *big.Int, ct *CTEncPoint, sk *ecdsa.PrivateKey) (*DLESigmaProof, error) {
+func GenerateEqualProof(amount *big.Int, ct *CTEncPoint, sk *ecdsa.PrivateKey, customs ...*big.Int) (*DLESigmaProof, error) {
 	g1 := new(ECPoint).Sub(ct.Y, new(ECPoint).ScalarMult(params.GetG(), amount))
 	h1 := ct.X
 	g2 := params.GetH()
 	h2 := new(ECPoint).SetFromPublicKey(&sk.PublicKey)
 	w := new(big.Int).Set(sk.D)
 
-	return generateDLESimaProof(g1, h1, g2, h2, w)
+	return generateDLESimaProof(g1, h1, g2, h2, w, customs...)
 }
 
 // generateDLESigmaProof generates items to prove g1 ^ w == h1; g2 ^ w == h2; w==w.
-func generateDLESimaProof(g1, h1, g2, h2 *ECPoint, w *big.Int) (*DLESigmaProof, error) {
+func generateDLESimaProof(g1, h1, g2, h2 *ECPoint, w *big.Int, customs ...*big.Int) (*DLESigmaProof, error) {
 	//
 	curve := g1.Curve
 	n := curve.Params().N
@@ -298,7 +298,7 @@ func generateDLESimaProof(g1, h1, g2, h2 *ECPoint, w *big.Int) (*DLESigmaProof, 
 	A1 := new(ECPoint).ScalarMult(g1, a)
 	A2 := new(ECPoint).ScalarMult(g2, a)
 	// compute challenge e.
-	e, err := ComputeChallenge(n, A1.X, A1.Y, A2.X, A2.Y)
+	e, err := ComputeChallenge(n, A1.X, A1.Y, A2.X, A2.Y, customs)
 	if err != nil {
 		return nil, err
 	}

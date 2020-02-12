@@ -1,20 +1,8 @@
 pragma solidity >= 0.5.0 < 0.6.0;
 
 import "./library/BN128.sol";
-
-interface RangeParams {
-  function getBitSize() external view returns(uint);
-  function getN() external view returns(uint);
-  function getGVector() external view returns(uint[64] memory);
-  function getHVector() external view returns(uint[64] memory);
-  function getG() external view returns(uint[2] memory);
-  function getH() external view returns(uint[2] memory);
-  function getU() external view returns(uint[2] memory);
-}
-
-interface IPVerifierInterface {
-  function verifyIPProofWithCustomParams(uint[64] calldata gv, uint[64] calldata hv, uint[2] calldata p, uint c, uint[10] calldata l, uint[10] calldata r, uint a, uint b) external view returns(bool);
-}
+import "./PublicParams.sol";
+import "./IPVerifier.sol";
 
 contract RangeProofVerifier {
   using BN128 for BN128.G1Point;
@@ -26,10 +14,10 @@ contract RangeProofVerifier {
   uint public constant n = 5;
 
   // public params contract.
-  RangeParams public rpParams;
+  PublicParams public params;
 
   // inner product verifier.
-  IPVerifierInterface public ipVerifier;
+  IPVerifier public ipVerifier;
 
   // g point.
   BN128.G1Point public g;
@@ -56,8 +44,10 @@ contract RangeProofVerifier {
 
   // ip proof.
   struct IPProof {
-    uint[n*2] l;
-    uint[n*2] r;
+    uint[2*n] l;
+    uint[2*n] r;
+    uint[] ll;
+    uint[] rr;
     uint a;
     uint b;
   }
@@ -65,8 +55,8 @@ contract RangeProofVerifier {
   // struct for tmp calculation.
   struct Board {
     // to call ip verifier.
-    uint[2*bitSize] gvs;
-    uint[2*bitSize] hvs;
+    uint[] gvs;
+    uint[] hvs;
     uint[2*n] ls;
     uint[2*n] rs;
     BN128.G1Point tmp;
@@ -94,18 +84,18 @@ contract RangeProofVerifier {
     uint[bitSize] tr;
   }
 
-  constructor(address params, address ip) public {
-    rpParams = RangeParams(params);
-    ipVerifier = IPVerifierInterface(ip);
-    require(bitSize == rpParams.getBitSize(), "bis size not equal");
-    require(n == rpParams.getN(), "number of l,r not equal");
+  constructor(address params_, address ip) public {
+    params = PublicParams(params_);
+    ipVerifier = IPVerifier(ip);
+    require(bitSize == params.getBitSize(), "bis size not equal");
+    require(n == params.getN(), "number of l,r not equal");
 
     // set public params.
-    uint[2] memory tmpG = rpParams.getG();
-    uint[2] memory tmpH = rpParams.getH();
-    uint[2] memory tmpU = rpParams.getU();
-    uint[2*bitSize] memory gv = rpParams.getGVector();
-    uint[2*bitSize] memory hv = rpParams.getHVector();
+    uint[2] memory tmpG = params.getG();
+    uint[2] memory tmpH = params.getH();
+    uint[2] memory tmpU = params.getU();
+    uint[2*bitSize] memory gv = params.getGVector();
+    uint[2*bitSize] memory hv = params.getHVector();
     g.X = tmpG[0];
     g.Y = tmpG[1];
     h.X = tmpH[0];
@@ -136,7 +126,7 @@ contract RangeProofVerifier {
    * l[0-1]: l.x,l.y.
    * r[0-1]: r.x,r.y.
    */
-  function verifyRangeProof(uint[10] memory points, uint[5] memory scalar, uint[2*n] memory l, uint[2*n] memory r) public returns(bool) {
+  function optimizedVerifyRangeProof(uint[10] memory points, uint[5] memory scalar, uint[2*n] memory l, uint[2*n] memory r) public view returns(bool) {
     RangeProof memory rangeProof;
     rangeProof.A = BN128.G1Point(points[0], points[1]);
     rangeProof.S = BN128.G1Point(points[2], points[3]);
@@ -154,6 +144,26 @@ contract RangeProofVerifier {
     return optimizedVerify(BN128.G1Point(points[8], points[9]), rangeProof);
   }
 
+
+  function verifyRangeProof(uint[10] memory points, uint[5] memory scalar, uint[] memory l, uint[] memory r) public view returns(bool) {
+    RangeProof memory rangeProof;
+    rangeProof.A = BN128.G1Point(points[0], points[1]);
+    rangeProof.S = BN128.G1Point(points[2], points[3]);
+    rangeProof.T1 = BN128.G1Point(points[4], points[5]);
+    rangeProof.T2 = BN128.G1Point(points[6], points[7]);
+    rangeProof.t = scalar[0];
+    rangeProof.txx = scalar[1];
+    rangeProof.u = scalar[2];
+
+    rangeProof.ipProof.ll = l;
+    rangeProof.ipProof.rr = r;
+    rangeProof.ipProof.a = scalar[3];
+    rangeProof.ipProof.b = scalar[4];
+
+    return verify(BN128.G1Point(points[8], points[9]), rangeProof);
+  }
+
+  // function getRangeProof()
 
   /*
    *
@@ -200,7 +210,7 @@ contract RangeProofVerifier {
   /*
    * @dev 2*(bitSize+n)+14 mul, 2*(bitSize+n)+9 add.
    */
-  function optimizedVerify(BN128.G1Point memory v, RangeProof memory rangeProof) internal returns(bool) {
+  function optimizedVerify(BN128.G1Point memory v, RangeProof memory rangeProof) internal view returns(bool) {
     BN128.G1Point[bitSize] memory gv = getGV();
     BN128.G1Point[bitSize] memory hv = getHV();
     Board memory board;
@@ -312,7 +322,11 @@ contract RangeProofVerifier {
     uint[2] memory pp;
     pp[0] = p.X;
     pp[1] = p.Y;
-    return ipVerifier.verifyIPProofWithCustomParams(b.gvs, b.hvs, pp, rangeProof.t, rangeProof.ipProof.l, rangeProof.ipProof.r, rangeProof.ipProof.a, rangeProof.ipProof.b);
+    uint[2] memory u;
+    u[0] = uBase.X;
+    u[1] = uBase.Y;
+
+    return ipVerifier.optimizedVerifyIPProof(b.gvs, b.hvs, pp, u, rangeProof.t, rangeProof.ipProof.ll, rangeProof.ipProof.rr, rangeProof.ipProof.a, rangeProof.ipProof.b);
   }
 
   function computeChallenge(uint a, uint b, uint c, uint d) internal pure returns(uint) {
@@ -513,8 +527,8 @@ contract RangeProofVerifier {
     return res;
   }
 
-  function toUintArray(BN128.G1Point[bitSize] memory points) internal pure returns(uint[2*bitSize] memory) {
-    uint[2*bitSize] memory res;
+  function toUintArray(BN128.G1Point[bitSize] memory points) internal pure returns(uint[] memory) {
+    uint[] memory res = new uint[](2*bitSize);
     for (uint i = 0; i < bitSize; i++) {
       res[2*i] = points[i].X;
       res[2*i+1] = points[i].Y;

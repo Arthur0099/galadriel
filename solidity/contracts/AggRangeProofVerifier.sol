@@ -130,7 +130,7 @@ contract AggRangeProofVerifier {
    * l[0-11]: l.x,l.y.
    * r[0-11]: r.x,r.y.
    */
-  function aggVerifyRangeProof(uint[10+aggSize] memory points, uint[5] memory scalar, uint[2*lrSize] memory l, uint[2*lrSize] memory r) public returns(bool) {
+  function aggVerifyRangeProof(uint[10+aggSize] memory points, uint[5] memory scalar, uint[2*lrSize] memory l, uint[2*lrSize] memory r) public view returns(bool) {
     RangeProof memory rangeProof;
     rangeProof.A = BN128.G1Point(points[0], points[1]);
     rangeProof.S = BN128.G1Point(points[2], points[3]);
@@ -153,12 +153,10 @@ contract AggRangeProofVerifier {
   }
 
 
-  event LogParam(string param, uint x, uint y);
-
   /*
    * @dev 
    */
-  function optimizedVerify(BN128.G1Point[2] memory v, RangeProof memory rangeProof) internal returns(bool) {
+  function optimizedVerify(BN128.G1Point[2] memory v, RangeProof memory rangeProof) internal view returns(bool) {
     BN128.G1Point[vectorSize] memory gv = getGV();
     BN128.G1Point[vectorSize] memory hv = getHV();
     Board memory board;

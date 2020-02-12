@@ -11,6 +11,16 @@ contract DLESigmaVerifier {
   using BN128 for BN128.G1Point;
   using BN128 for *;
 
+  function verifyDLESigmaProofWithNonce(uint[12] memory points, uint z, uint nonce) public view returns(bool) {
+    uint e = computeChallenge3(points[0], points[1], points[2], points[3], nonce);
+    return verify(points, z, e);
+  }
+
+  function verifyDLESigmaProofWithCustom(uint[12] memory points, uint z, uint nonce, uint addr) public view returns(bool) {
+    uint e = computeChallenge2(points[0], points[1], points[2], points[3], nonce, addr);
+    return verify(points, z, e);
+  }
+
   /**
    * @dev verify dle sigma proof. 4 mul, 2 add.
    * points[0-1]: A1 point.
@@ -23,6 +33,10 @@ contract DLESigmaVerifier {
    */
   function verifyDLESigmaProof(uint[12] memory points, uint z) public view returns(bool) {
     uint e = computeChallenge(points[0], points[1], points[2], points[3]);
+    return verify(points, z, e);
+  }
+
+  function verify(uint[12] memory points, uint z, uint e) internal view returns(bool) {
     uint[6] memory check1;
     check1[0] = points[4];
     check1[1] = points[5];
@@ -95,5 +109,11 @@ contract DLESigmaVerifier {
     return uint(keccak256(abi.encodePacked(a, b, c, d))).mod();
   }
 
-  //
+  function computeChallenge2(uint a, uint b, uint c, uint d, uint e, uint f) internal pure returns(uint) {
+    return uint(keccak256(abi.encodePacked(a, b, c, d, e, f))).mod();
+  }
+
+  function computeChallenge3(uint a, uint b, uint c, uint d, uint e) internal pure returns(uint) {
+    return uint(keccak256(abi.encodePacked(a, b, c, d, e))).mod();
+  }
 }

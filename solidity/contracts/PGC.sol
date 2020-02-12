@@ -255,6 +255,7 @@ contract PGC {
     // b.tmpUpdatedBalance.Y = b.tmpUpdatedBalance.Y.add(b.ct1.Y.neg());
     b.tmpUpdatedBalance.X = BN128.G1Point(points[16], points[17]);
     b.tmpUpdatedBalance.Y = BN128.G1Point(points[18], points[19]);
+    b.tmpUpdatedBalance.nonce = b.localNonce;
     rolloverAndUpdate(b.tmpUpdatedBalance, points[0], points[1], token);
 
     // update receiver balance or make it to pending.
@@ -329,54 +330,54 @@ contract PGC {
    * l[2*n-4*n-1]: range proof 2 l.x, l.y.
    * r[2*n-4*n-1]: range proof 2 r.x, r.y.
    */
-  function transfer(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint token, uint nonce, uint[2] memory sig) public returns(bool) {
-    // check for sig and nonce.
-    // 4 mul, 1 add.
-    require(verifyTransferSig(points, scalar, rpoints, l, r, token, nonce, sig), "verify sig failed for transfertx");
+  // function transfer(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint token, uint nonce, uint[2] memory sig) public returns(bool) {
+  //   // check for sig and nonce.
+  //   // 4 mul, 1 add.
+  //   require(verifyTransferSig(points, scalar, rpoints, l, r, token, nonce, sig), "verify sig failed for transfertx");
 
-    Board memory b;
-    // 2 add if no pending.
-    (b.userBalance, b.localNonce) = getUserBalance(points[0], points[1], address(token));
-    // check for nonce.
-    require(nonce == b.localNonce, "invalid nonce");
-    // n=5, bitSize=32, 190 mul, 178 add.
-    require(pgcVerifier.verifyTransfer(points, scalar, rpoints, l, r, b.userBalance), "verify proofs for transfer failed");
+  //   Board memory b;
+  //   // 2 add if no pending.
+  //   (b.userBalance, b.localNonce) = getUserBalance(points[0], points[1], address(token));
+  //   // check for nonce.
+  //   require(nonce == b.localNonce, "invalid nonce");
+  //   // n=5, bitSize=32, 190 mul, 178 add.
+  //   require(pgcVerifier.verifyTransfer(points, scalar, rpoints, l, r, b.userBalance), "verify proofs for transfer failed");
 
-    // update sender's balance.
-    // 4 add.
-    b.ct1.X = BN128.G1Point(points[2], points[3]);
-    b.ct1.Y = BN128.G1Point(points[4], points[5]);
-    // the refreshed balance is checked before, just use it instead.
-    // b.tmpUpdatedBalance = getBalanceCanSpentInternal(points[0], points[1], token);
-    // b.tmpUpdatedBalance.X = b.tmpUpdatedBalance.X.add(b.ct1.X.neg());
-    // b.tmpUpdatedBalance.Y = b.tmpUpdatedBalance.Y.add(b.ct1.Y.neg());
-    b.tmpUpdatedBalance.X = BN128.G1Point(points[20], points[21]);
-    b.tmpUpdatedBalance.Y = BN128.G1Point(points[22], points[23]);
-    rolloverAndUpdate(b.tmpUpdatedBalance, points[0], points[1], token);
+  //   // update sender's balance.
+  //   // 4 add.
+  //   b.ct1.X = BN128.G1Point(points[2], points[3]);
+  //   b.ct1.Y = BN128.G1Point(points[4], points[5]);
+  //   // the refreshed balance is checked before, just use it instead.
+  //   // b.tmpUpdatedBalance = getBalanceCanSpentInternal(points[0], points[1], token);
+  //   // b.tmpUpdatedBalance.X = b.tmpUpdatedBalance.X.add(b.ct1.X.neg());
+  //   // b.tmpUpdatedBalance.Y = b.tmpUpdatedBalance.Y.add(b.ct1.Y.neg());
+  //   b.tmpUpdatedBalance.X = BN128.G1Point(points[20], points[21]);
+  //   b.tmpUpdatedBalance.Y = BN128.G1Point(points[22], points[23]);
+  //   rolloverAndUpdate(b.tmpUpdatedBalance, points[0], points[1], token);
 
-    // update receiver balance or make it to pending.
-    b.ct2.X = BN128.G1Point(points[8], points[9]);
-    b.ct2.Y = BN128.G1Point(points[10], points[11]);
-    toBalanceOrPending(b.ct2, points[6], points[7], token);
+  //   // update receiver balance or make it to pending.
+  //   b.ct2.X = BN128.G1Point(points[8], points[9]);
+  //   b.ct2.Y = BN128.G1Point(points[10], points[11]);
+  //   toBalanceOrPending(b.ct2, points[6], points[7], token);
 
-    // set for event.
-    b.fromto[0] = points[0];
-    b.fromto[1] = points[1];
-    b.fromto[2] = points[6];
-    b.fromto[3] = points[7];
-    b.logCt1[0] = b.ct1.X.X;
-    b.logCt1[1] = b.ct1.X.Y;
-    b.logCt1[2] = b.ct1.Y.X;
-    b.logCt1[3] = b.ct1.Y.Y;
-    b.logCt2[0] = b.ct2.X.X;
-    b.logCt2[1] = b.ct2.X.Y;
-    b.logCt2[2] = b.ct2.Y.X;
-    b.logCt2[3] = b.ct2.Y.Y;
+  //   // set for event.
+  //   b.fromto[0] = points[0];
+  //   b.fromto[1] = points[1];
+  //   b.fromto[2] = points[6];
+  //   b.fromto[3] = points[7];
+  //   b.logCt1[0] = b.ct1.X.X;
+  //   b.logCt1[1] = b.ct1.X.Y;
+  //   b.logCt1[2] = b.ct1.Y.X;
+  //   b.logCt1[3] = b.ct1.Y.Y;
+  //   b.logCt2[0] = b.ct2.X.X;
+  //   b.logCt2[1] = b.ct2.X.Y;
+  //   b.logCt2[2] = b.ct2.Y.X;
+  //   b.logCt2[3] = b.ct2.Y.Y;
 
-    emit LogTransfer(msg.sender, address(token), b.fromto, b.logCt1, b.logCt2, now);
+  //   emit LogTransfer(msg.sender, address(token), b.fromto, b.logCt1, b.logCt2, now);
 
-    return true;
-  }
+  //   return true;
+  // }
 
   function getUserBalance(uint x, uint y, address token) public view returns (uint[4] memory ct, uint nonce) {
     CT memory userBalance = getBalanceCanSpentInternal(x, y, uint(token));
@@ -476,6 +477,27 @@ contract PGC {
     emit LogBurnPart(msg.sender, receiver, b.token, points[0], points[1], amount, now);
   }
 
+  function burnETH(address payable receiver, uint amount, uint[2] memory publicKey, uint[4] memory proof, uint z) public returns(bool) {
+    require(amount >= 1, "invalid amount");
+    uint[4] memory userBalance;
+    uint nonceSent;
+    (userBalance, nonceSent) = getUserBalance(publicKey[0], publicKey[1], address(0));
+
+    require(pgcVerifier.verifyBurnETH(amount, publicKey, proof, z, userBalance, nonceSent, uint(receiver)), "dle sigma verify failed");
+
+    // update user encrypted balance.
+    // CT memory tmpUpdatedBalance = encrypt(0, BN128.G1Point(publicKey[0], publicKey[1]));
+    CT memory tmpUpdatedBalance;
+    tmpUpdatedBalance.X = BN128.G1Point(0, 0);
+    tmpUpdatedBalance.Y = BN128.G1Point(0, 0);
+    tmpUpdatedBalance.nonce = nonceSent;
+    rolloverAndUpdate(tmpUpdatedBalance, publicKey[0], publicKey[1], 0);
+
+    receiver.transfer(tokenConverter.convertToToken(address(0), amount));
+
+    emit LogBurn(msg.sender, receiver, address(0), publicKey[0], publicKey[1], amount, now);
+  }
+
 
   /*
    * @dev burn withdraw all eth back to eth account.
@@ -502,6 +524,7 @@ contract PGC {
     CT memory tmpUpdatedBalance;
     tmpUpdatedBalance.X = BN128.G1Point(0, 0);
     tmpUpdatedBalance.Y = BN128.G1Point(0, 0);
+    tmpUpdatedBalance.nonce = nonceSent;
     rolloverAndUpdate(tmpUpdatedBalance, publicKey[0], publicKey[1], token);
 
     if (token == 0) {
