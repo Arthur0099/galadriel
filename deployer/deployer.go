@@ -74,6 +74,22 @@ func DeployRangeproofverifier(auth *bind.TransactOpts, ethclient *ethclient.Clie
 	return addr, con
 }
 
+// DeployToken deploys a erc-20 token contract.
+func DeployToken(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.Address, *contracts.Token) {
+	if err := client.SetNonce(auth, ethclient); err != nil {
+		panic(err)
+	}
+
+	addr, tx, con, err := contracts.DeployToken(auth, ethclient)
+	if err != nil {
+		panic(err)
+	}
+	auth.Nonce.Add(auth.Nonce, utils.One)
+	client.WaitForTx(ethclient, tx.Hash())
+
+	return addr, con
+}
+
 // DeployTokenConverter deploys contract to convert token.
 func DeployTokenConverter(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.Address, *contracts.Tokenconverter) {
 	if err := client.SetNonce(auth, ethclient); err != nil {
@@ -157,14 +173,35 @@ func DeployPGCMain(auth *bind.TransactOpts, ethclient *ethclient.Client, params,
 }
 
 // DeployPGCSystemAllContract deploys all contract for pgc system.
-func DeployPGCSystemAllContract(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.Address, *contracts.Pgc) {
+func DeployPGCSystemAllContract(auth *bind.TransactOpts, ethclient *ethclient.Client) ([]common.Address, *contracts.Pgc) {
+	addrs := make([]common.Address, 0)
+
 	params, _ := DeployParams(auth, ethclient)
+	addrs = append(addrs, params)
+
 	sigma, _ := DeploySigma(auth, ethclient, params)
+	addrs = append(addrs, sigma)
+
 	dleSigma, _ := DeployDleSigma(auth, ethclient)
+	addrs = append(addrs, dleSigma)
+
 	ip, _ := DeployInnerProduct(auth, ethclient, params)
+	addrs = append(addrs, ip)
+
 	rangeProof, _ := DeployRangeproofverifier(auth, ethclient, params, ip)
+	addrs = append(addrs, rangeProof)
+
 	tokenConverter, _ := DeployTokenConverter(auth, ethclient)
+	addrs = append(addrs, tokenConverter)
+
 	aggRange, _ := DeployAggRangeProof(auth, ethclient, params)
+	addrs = append(addrs, aggRange)
+
 	pgcVerifier, _ := DeployPGCVerifier(auth, ethclient, params, dleSigma, rangeProof, aggRange, sigma)
-	return DeployPGCMain(auth, ethclient, params, pgcVerifier, tokenConverter)
+	addrs = append(addrs, pgcVerifier)
+
+	pgcMain, pgc := DeployPGCMain(auth, ethclient, params, pgcVerifier, tokenConverter)
+	addrs = append(addrs, pgcMain)
+
+	return addrs, pgc
 }

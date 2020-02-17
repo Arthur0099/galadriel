@@ -342,174 +342,174 @@ func testPGCPending(sender *bind.TransactOpts, rpcClient *Client, client *ethcli
 }
 
 func testPGCFlow(sender *bind.TransactOpts, client *ethclient.Client, t *testing.T, tokenContract *contracts.Token, token common.Address, cs *Contracts) {
-	var err error
-	sender.GasLimit = testGasLimit
+	// var err error
+	// sender.GasLimit = testGasLimit
 
-	// if test for token.
-	// approve to contract first.
-	if tokenContract != nil {
-		approveAmount := new(big.Int).SetUint64(1000)
+	// // if test for token.
+	// // approve to contract first.
+	// if tokenContract != nil {
+	// 	approveAmount := new(big.Int).SetUint64(1000)
 
-		approveTx, err := tokenContract.Approve(sender, cs.PGCAddress, approveAmount)
-		require.Nil(t, err, "approve for token failed")
-		waitFor(approveTx.Hash(), client)
-		sender.Nonce.Add(sender.Nonce, one)
+	// 	approveTx, err := tokenContract.Approve(sender, cs.PGCAddress, approveAmount)
+	// 	require.Nil(t, err, "approve for token failed")
+	// 	waitFor(approveTx.Hash(), client)
+	// 	sender.Nonce.Add(sender.Nonce, one)
 
-		added, _, _, _ := cs.TokenConverter.GetTokenInfo(nil, token)
-		if !added {
-			// add token contract to tokenconvert.
-			addTokenTx, err := cs.TokenConverter.AddToken(sender, token, one, "")
-			if err != nil {
-				panic(err)
-			}
-			log.Info("add token to tokenconverter", "tx", addTokenTx.Hash().Hex())
-			waitFor(addTokenTx.Hash(), client)
-			sender.Nonce.Add(sender.Nonce, one)
+	// 	added, _, _, _ := cs.TokenConverter.GetTokenInfo(nil, token)
+	// 	if !added {
+	// 		// add token contract to tokenconvert.
+	// 		addTokenTx, err := cs.TokenConverter.AddToken(sender, token, one, "")
+	// 		if err != nil {
+	// 			panic(err)
+	// 		}
+	// 		log.Info("add token to tokenconverter", "tx", addTokenTx.Hash().Hex())
+	// 		waitFor(addTokenTx.Hash(), client)
+	// 		sender.Nonce.Add(sender.Nonce, one)
 
-		}
-	}
+	// 	}
+	// }
 
-	// generate alice, bob account.
-	aliceInitBalance := new(big.Int).SetUint64(500)
-	alice := CreateTestAccount("alice", aliceInitBalance)
-	sender.Value = new(big.Int).Mul(ether, aliceInitBalance)
-	sender.Value.Div(sender.Value, precision)
-	if tokenContract != nil {
-		sender.Value = nil
-	}
-	alicePK := [2]*big.Int{alice.sk.PublicKey.X, alice.sk.PublicKey.Y}
-	aliceTx, err := cs.PGC.DepositAccount(sender, alicePK, token, aliceInitBalance)
-	require.Nil(t, err, "deposit contract failed")
-	waitFor(aliceTx.Hash(), client)
-	log.Info("deposit alice success", "tx", aliceTx.Hash().Hex())
+	// // generate alice, bob account.
+	// aliceInitBalance := new(big.Int).SetUint64(500)
+	// alice := CreateTestAccount("alice", aliceInitBalance)
+	// sender.Value = new(big.Int).Mul(ether, aliceInitBalance)
+	// sender.Value.Div(sender.Value, precision)
+	// if tokenContract != nil {
+	// 	sender.Value = nil
+	// }
+	// alicePK := [2]*big.Int{alice.sk.PublicKey.X, alice.sk.PublicKey.Y}
+	// aliceTx, err := cs.PGC.DepositAccount(sender, alicePK, token, aliceInitBalance)
+	// require.Nil(t, err, "deposit contract failed")
+	// waitFor(aliceTx.Hash(), client)
+	// log.Info("deposit alice success", "tx", aliceTx.Hash().Hex())
 
-	// check for alice's encrypted balance.
-	aliceEncryptB, _ := cs.PGC.GetUserBalance(nil, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, token)
-	aliceDecryptB := Decrypt(alice.sk, arrayToCT(aliceEncryptB, alice.sk.Curve))
-	require.Equal(t, aliceInitBalance.Bytes(), aliceDecryptB, "alice'balance on chain not same with local")
+	// // check for alice's encrypted balance.
+	// aliceEncryptB, _ := cs.PGC.GetUserBalance(nil, alice.sk.PublicKey.X, alice.sk.PublicKey.Y, token)
+	// aliceDecryptB := Decrypt(alice.sk, arrayToCT(aliceEncryptB, alice.sk.Curve))
+	// require.Equal(t, aliceInitBalance.Bytes(), aliceDecryptB, "alice'balance on chain not same with local")
 
-	// keep balance same with chain.
-	alice.UpdateBalance(aliceEncryptB)
+	// // keep balance same with chain.
+	// alice.UpdateBalance(aliceEncryptB)
 
-	// generate bob.
-	bobInitBalance := new(big.Int).SetUint64(500)
-	bob := CreateTestAccount("bob", bobInitBalance)
-	sender.Value = new(big.Int).Mul(ether, bobInitBalance)
-	sender.Value.Div(sender.Value, precision)
-	if tokenContract != nil {
-		sender.Value = nil
-	}
-	sender.Nonce.Add(sender.Nonce, one)
-	bobPK := [2]*big.Int{bob.sk.PublicKey.X, bob.sk.PublicKey.Y}
-	bobTx, err := cs.PGC.DepositAccount(sender, bobPK, token, bobInitBalance)
-	require.Nil(t, err, "deposit to bob on chain failed")
-	waitFor(bobTx.Hash(), client)
-	sender.Nonce.Add(sender.Nonce, one)
+	// // generate bob.
+	// bobInitBalance := new(big.Int).SetUint64(500)
+	// bob := CreateTestAccount("bob", bobInitBalance)
+	// sender.Value = new(big.Int).Mul(ether, bobInitBalance)
+	// sender.Value.Div(sender.Value, precision)
+	// if tokenContract != nil {
+	// 	sender.Value = nil
+	// }
+	// sender.Nonce.Add(sender.Nonce, one)
+	// bobPK := [2]*big.Int{bob.sk.PublicKey.X, bob.sk.PublicKey.Y}
+	// bobTx, err := cs.PGC.DepositAccount(sender, bobPK, token, bobInitBalance)
+	// require.Nil(t, err, "deposit to bob on chain failed")
+	// waitFor(bobTx.Hash(), client)
+	// sender.Nonce.Add(sender.Nonce, one)
 
-	// check for bob's encrypted balance.
-	bobEncryptB, _ := cs.PGC.GetUserBalance(nil, bob.sk.PublicKey.X, bob.sk.PublicKey.Y, token)
-	bobDecryptB := Decrypt(bob.sk, arrayToCT(bobEncryptB, bob.sk.Curve))
-	require.Equal(t, bobInitBalance.Bytes(), bobDecryptB, "bob's balance on chain not same with local")
-	// keep balance same with chain.
-	bob.UpdateBalance(bobEncryptB)
-	sender.Value = nil
-
-	transferAmount := new(big.Int).SetUint64(300)
-
-	// user two range proof.
-	// ctx, err := CreateCTX(alice, &bob.sk.PublicKey, transferAmount)
-	// require.Nil(t, err, "create transfer ctx failed")
-
-	// send transfer tx to contract on chain.
-	// tx := ctxToTransferTx(ctx)
-	// transferHash, err := HashTransfer(tx, token)
-	// require.Nil(t, err, "hash transfer data failed")
-
-	// transferSig, err := Sign(alice.sk, transferHash)
-	// require.Nil(t, err, "alice sign for transfer tx failed")
-
+	// // check for bob's encrypted balance.
+	// bobEncryptB, _ := cs.PGC.GetUserBalance(nil, bob.sk.PublicKey.X, bob.sk.PublicKey.Y, token)
+	// bobDecryptB := Decrypt(bob.sk, arrayToCT(bobEncryptB, bob.sk.Curve))
+	// require.Equal(t, bobInitBalance.Bytes(), bobDecryptB, "bob's balance on chain not same with local")
+	// // keep balance same with chain.
+	// bob.UpdateBalance(bobEncryptB)
 	// sender.Value = nil
-	// transferTxHash, err := cs.PGC.Transfer(sender, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, new(big.Int).SetBytes(token.Bytes()), tx.nonce, transferSig.ToInputs())
+
+	// transferAmount := new(big.Int).SetUint64(300)
+
+	// // user two range proof.
+	// // ctx, err := CreateCTX(alice, &bob.sk.PublicKey, transferAmount)
+	// // require.Nil(t, err, "create transfer ctx failed")
+
+	// // send transfer tx to contract on chain.
+	// // tx := ctxToTransferTx(ctx)
+	// // transferHash, err := HashTransfer(tx, token)
+	// // require.Nil(t, err, "hash transfer data failed")
+
+	// // transferSig, err := Sign(alice.sk, transferHash)
+	// // require.Nil(t, err, "alice sign for transfer tx failed")
+
+	// // sender.Value = nil
+	// // transferTxHash, err := cs.PGC.Transfer(sender, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, new(big.Int).SetBytes(token.Bytes()), tx.nonce, transferSig.ToInputs())
+	// // require.Nil(t, err, "create transfer tx failed")
+
+	// // use aggreate .
+	// pgcCTX, err := CreatePGCCtx(alice, &bob.sk.PublicKey, transferAmount)
+	// require.Nil(t, err, "create transfer ctx failed")
+	// input := pgcCTX.ExportToSolidityInput()
+
+	// transferTxHash, err := cs.PGC.AggTransfer(sender, input.points, input.scalars, input.l, input.r)
 	// require.Nil(t, err, "create transfer tx failed")
 
-	// use aggreate .
-	pgcCTX, err := CreatePGCCtx(alice, &bob.sk.PublicKey, transferAmount)
-	require.Nil(t, err, "create transfer ctx failed")
-	input := pgcCTX.ExportToSolidityInput()
+	// sender.Nonce.Add(sender.Nonce, one)
+	// waitFor(transferTxHash.Hash(), client)
+	// log.Info("transfer from alice to bob", "transfer amount", transferAmount, "hash", transferTxHash.Hash().Hex())
 
-	transferTxHash, err := cs.PGC.AggTransfer(sender, input.points, input.scalars, input.l, input.r)
-	require.Nil(t, err, "create transfer tx failed")
+	// // for test.
+	// // return
 
-	sender.Nonce.Add(sender.Nonce, one)
-	waitFor(transferTxHash.Hash(), client)
-	log.Info("transfer from alice to bob", "transfer amount", transferAmount, "hash", transferTxHash.Hash().Hex())
+	// // check alice/bob balance.
+	// aliceEncBalanceAfter, _ := cs.PGC.GetUserBalance(nil, alicePK[0], alicePK[1], token)
+	// aliceBalanceAfter := Decrypt(alice.sk, arrayToCT(aliceEncBalanceAfter, alice.sk.Curve))
+	// aliceExceptBalance := new(big.Int).Sub(aliceInitBalance, transferAmount)
+	// require.Equal(t, aliceExceptBalance.Bytes(), aliceBalanceAfter, "alice balance after transfer is invalid")
+	// log.Info("alice'balance after is", "balance", new(big.Int).SetBytes(aliceBalanceAfter))
 
-	// for test.
-	// return
+	// // check for bob's balance.
+	// bobEncryptBalanceAfter, _ := cs.PGC.GetUserBalance(nil, bobPK[0], bobPK[1], token)
+	// bobBalanceAfter := Decrypt(bob.sk, arrayToCT(bobEncryptBalanceAfter, bob.sk.Curve))
+	// bobExceptBalance := new(big.Int).Add(bobInitBalance, transferAmount)
+	// require.Equal(t, bobExceptBalance.Bytes(), bobBalanceAfter, "bob balance after transfer is invalid")
+	// log.Info("bob's balance after is ", "balance", new(big.Int).SetBytes(bobBalanceAfter))
+	// bob.UpdateBalance(bobEncryptBalanceAfter)
 
-	// check alice/bob balance.
-	aliceEncBalanceAfter, _ := cs.PGC.GetUserBalance(nil, alicePK[0], alicePK[1], token)
-	aliceBalanceAfter := Decrypt(alice.sk, arrayToCT(aliceEncBalanceAfter, alice.sk.Curve))
-	aliceExceptBalance := new(big.Int).Sub(aliceInitBalance, transferAmount)
-	require.Equal(t, aliceExceptBalance.Bytes(), aliceBalanceAfter, "alice balance after transfer is invalid")
-	log.Info("alice'balance after is", "balance", new(big.Int).SetBytes(aliceBalanceAfter))
+	// bob.m = new(big.Int).Set(bobExceptBalance)
+	// // create burn tx for bob
+	// burnAmount := new(big.Int).SetUint64(50)
+	// burnPartTx, err := CreateBurnPartTx(bob, burnAmount)
+	// require.Nil(t, err)
 
-	// check for bob's balance.
-	bobEncryptBalanceAfter, _ := cs.PGC.GetUserBalance(nil, bobPK[0], bobPK[1], token)
-	bobBalanceAfter := Decrypt(bob.sk, arrayToCT(bobEncryptBalanceAfter, bob.sk.Curve))
-	bobExceptBalance := new(big.Int).Add(bobInitBalance, transferAmount)
-	require.Equal(t, bobExceptBalance.Bytes(), bobBalanceAfter, "bob balance after transfer is invalid")
-	log.Info("bob's balance after is ", "balance", new(big.Int).SetBytes(bobBalanceAfter))
-	bob.UpdateBalance(bobEncryptBalanceAfter)
+	// receiver := sender.From
+	// tmpInfo := txToBurnPartTx(burnPartTx)
+	// burnHash, err := HashBurnPart(receiver, token, tmpInfo)
+	// require.Nil(t, err)
+	// burnSig, err := Sign(bob.sk, burnHash)
+	// require.Nil(t, err)
 
-	bob.m = new(big.Int).Set(bobExceptBalance)
-	// create burn tx for bob
-	burnAmount := new(big.Int).SetUint64(50)
-	burnPartTx, err := CreateBurnPartTx(bob, burnAmount)
-	require.Nil(t, err)
+	// burnTxH, err := cs.PGC.BurnPart(sender, receiver, new(big.Int).SetBytes(token.Bytes()), tmpInfo.amount, tmpInfo.points, tmpInfo.scalar, tmpInfo.rpoints, tmpInfo.l, tmpInfo.r, tmpInfo.nonce, burnSig.ToInputs())
+	// require.Nil(t, err, "bob create burn part tx failed")
+	// log.Info("burn part tx", "hash", burnTxH.Hash().Hex(), "burn amount", burnAmount)
+	// waitFor(burnTxH.Hash(), client)
+	// sender.Nonce.Add(sender.Nonce, one)
 
-	receiver := sender.From
-	tmpInfo := txToBurnPartTx(burnPartTx)
-	burnHash, err := HashBurnPart(receiver, token, tmpInfo)
-	require.Nil(t, err)
-	burnSig, err := Sign(bob.sk, burnHash)
-	require.Nil(t, err)
+	// // check bob's balance.
+	// bobFinalEncBalance, _ := cs.PGC.GetUserBalance(nil, bobPK[0], bobPK[1], token)
+	// bobf := Decrypt(bob.sk, arrayToCT(bobFinalEncBalance, bob.sk.Curve))
+	// log.Info("bob's final balance", "amount", new(big.Int).SetBytes(bobf))
+	// finalExpect := new(big.Int).Sub(new(big.Int).SetBytes(bobBalanceAfter), burnAmount)
+	// require.Equal(t, finalExpect.Bytes(), bobf, "bob'balance after burn is invalid")
 
-	burnTxH, err := cs.PGC.BurnPart(sender, receiver, new(big.Int).SetBytes(token.Bytes()), tmpInfo.amount, tmpInfo.points, tmpInfo.scalar, tmpInfo.rpoints, tmpInfo.l, tmpInfo.r, tmpInfo.nonce, burnSig.ToInputs())
-	require.Nil(t, err, "bob create burn part tx failed")
-	log.Info("burn part tx", "hash", burnTxH.Hash().Hex(), "burn amount", burnAmount)
-	waitFor(burnTxH.Hash(), client)
-	sender.Nonce.Add(sender.Nonce, one)
+	// // burn all amount.
+	// bob.nonce = bobFinalEncBalance.Nonce.Uint64()
+	// bob.balance.X.X = bobFinalEncBalance.Ct[0]
+	// bob.balance.X.Y = bobFinalEncBalance.Ct[1]
+	// bob.balance.Y.X = bobFinalEncBalance.Ct[2]
+	// bob.balance.Y.Y = bobFinalEncBalance.Ct[3]
+	// burnTx, err := CreateBurnTx(bob, finalExpect)
+	// require.Nil(t, err)
+	// burnTxInfo := burnTxToOb(burnTx)
+	// burnHash, err = HashBurn(receiver, token, burnTxInfo)
+	// require.Nil(t, err)
+	// burnSig, err = Sign(bob.sk, burnHash)
+	// require.Nil(t, err)
+	// burnTxHash, err := cs.PGC.Burn(sender, receiver, new(big.Int).SetBytes(token.Bytes()), finalExpect, burnTxInfo.pk, burnTxInfo.proof, burnTxInfo.z, burnTxInfo.nonce, burnSig.ToInputs())
+	// log.Info("bob's burn all tx", "tx", burnTxHash.Hash().Hex())
 
-	// check bob's balance.
-	bobFinalEncBalance, _ := cs.PGC.GetUserBalance(nil, bobPK[0], bobPK[1], token)
-	bobf := Decrypt(bob.sk, arrayToCT(bobFinalEncBalance, bob.sk.Curve))
-	log.Info("bob's final balance", "amount", new(big.Int).SetBytes(bobf))
-	finalExpect := new(big.Int).Sub(new(big.Int).SetBytes(bobBalanceAfter), burnAmount)
-	require.Equal(t, finalExpect.Bytes(), bobf, "bob'balance after burn is invalid")
-
-	// burn all amount.
-	bob.nonce = bobFinalEncBalance.Nonce.Uint64()
-	bob.balance.X.X = bobFinalEncBalance.Ct[0]
-	bob.balance.X.Y = bobFinalEncBalance.Ct[1]
-	bob.balance.Y.X = bobFinalEncBalance.Ct[2]
-	bob.balance.Y.Y = bobFinalEncBalance.Ct[3]
-	burnTx, err := CreateBurnTx(bob, finalExpect)
-	require.Nil(t, err)
-	burnTxInfo := burnTxToOb(burnTx)
-	burnHash, err = HashBurn(receiver, token, burnTxInfo)
-	require.Nil(t, err)
-	burnSig, err = Sign(bob.sk, burnHash)
-	require.Nil(t, err)
-	burnTxHash, err := cs.PGC.Burn(sender, receiver, new(big.Int).SetBytes(token.Bytes()), finalExpect, burnTxInfo.pk, burnTxInfo.proof, burnTxInfo.z, burnTxInfo.nonce, burnSig.ToInputs())
-	log.Info("bob's burn all tx", "tx", burnTxHash.Hash().Hex())
-
-	// check bob's balance.
-	bobFinalEncBalance, _ = cs.PGC.GetUserBalance(nil, bobPK[0], bobPK[1], token)
-	bobf = Decrypt(bob.sk, arrayToCT(bobFinalEncBalance, bob.sk.Curve))
-	log.Info("bob's final balance", "amount", new(big.Int).SetBytes(bobf))
-	finalExpect = new(big.Int).SetUint64(0)
-	require.Equal(t, finalExpect.Bytes(), bobf, "bob'balance after burn is invalid")
+	// // check bob's balance.
+	// bobFinalEncBalance, _ = cs.PGC.GetUserBalance(nil, bobPK[0], bobPK[1], token)
+	// bobf = Decrypt(bob.sk, arrayToCT(bobFinalEncBalance, bob.sk.Curve))
+	// log.Info("bob's final balance", "amount", new(big.Int).SetBytes(bobf))
+	// finalExpect = new(big.Int).SetUint64(0)
+	// require.Equal(t, finalExpect.Bytes(), bobf, "bob'balance after burn is invalid")
 }
 
 func newBurnTx() *burnTx {

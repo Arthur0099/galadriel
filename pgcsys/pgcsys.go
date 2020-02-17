@@ -31,7 +31,7 @@ type solidityPGCInput struct {
 
 	l, r [12]*big.Int
 
-	scalars [11]*big.Int
+	scalars [10]*big.Int
 }
 
 // ToSolidityInput formats tx to solidity to verify contract
@@ -85,19 +85,18 @@ func (tx *ConfidentialTx) ToSolidityInput() *solidityPGCInput {
 	}
 
 	// scalar
-	input.scalars[0] = tx.nonce
-	input.scalars[1] = tx.sigmaPTEqualityProof.Z1
-	input.scalars[2] = tx.sigmaPTEqualityProof.Z2
-	input.scalars[3] = tx.sigmaCTValidProof.Z1
-	input.scalars[4] = tx.sigmaCTValidProof.Z2
-	input.scalars[5] = tx.sigmaDlogeqProof.Z
+	input.scalars[0] = tx.sigmaPTEqualityProof.Z1
+	input.scalars[1] = tx.sigmaPTEqualityProof.Z2
+	input.scalars[2] = tx.sigmaCTValidProof.Z1
+	input.scalars[3] = tx.sigmaCTValidProof.Z2
+	input.scalars[4] = tx.sigmaDlogeqProof.Z
 	// range proof.
-	input.scalars[6] = tx.bulletProof.T()
-	input.scalars[7] = tx.bulletProof.TX()
-	input.scalars[8] = tx.bulletProof.U()
+	input.scalars[5] = tx.bulletProof.T()
+	input.scalars[6] = tx.bulletProof.TX()
+	input.scalars[7] = tx.bulletProof.U()
 	// inner proof.
-	input.scalars[9] = tx.bulletProof.AIP()
-	input.scalars[10] = tx.bulletProof.BIP()
+	input.scalars[8] = tx.bulletProof.AIP()
+	input.scalars[9] = tx.bulletProof.BIP()
 
 	return &input
 }
@@ -212,7 +211,7 @@ func (btx *BurnETHTx) ToSolidityInput() *burnEHTTxInput {
 }
 
 // CreateBurnETHTx creates tx to burn eth on chain.
-func CreateBurnETHTx(params proof.AggRangeParams, alice *Account, receiver common.Address) (*BurnETHTx, error) {
+func CreateBurnETHTx(params proof.AggRangeParams, alice *Account, receiver, token common.Address) (*BurnETHTx, error) {
 	tx := BurnETHTx{}
 
 	tx.Account = new(utils.ECPoint).SetFromPublicKey(&alice.sk.PublicKey)
@@ -220,7 +219,8 @@ func CreateBurnETHTx(params proof.AggRangeParams, alice *Account, receiver commo
 
 	// generate proof to prove alice has the sk and the amount is indeed same with value encrypted.
 	// alice's encrypted balance should be right set.
-	proof, err := proof.GenerateEqualProof(params, tx.Amount, alice.balance, alice.sk, new(big.Int).SetUint64(alice.nonce), receiver.Hash().Big())
+	proof, err := proof.GenerateEqualProof(params, tx.Amount, alice.balance, alice.sk, new(big.Int).SetUint64(alice.nonce),
+		receiver.Hash().Big(), token.Hash().Big())
 	if err != nil {
 		return nil, err
 	}

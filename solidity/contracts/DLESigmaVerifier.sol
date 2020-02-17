@@ -16,8 +16,27 @@ contract DLESigmaVerifier {
     return verify(points, z, e);
   }
 
-  function verifyDLESigmaProofWithCustom(uint[12] memory points, uint z, uint nonce, uint addr) public view returns(bool) {
-    uint e = computeChallenge2(points[0], points[1], points[2], points[3], nonce, addr);
+  function verifyDLESigmaProofWithCustom(uint[12] memory points, uint z, uint[] memory input) public view returns(bool) {
+    uint[] memory ninput = new uint[](4+input.length);
+    for (uint i = 0; i < 4; i++) {
+      ninput[i] = points[i];
+    }
+    for (uint i = 0; i < input.length; i++) {
+      ninput[i+4] = input[i];
+    }
+    uint e = computeCha(ninput);
+    return verify(points, z, e);
+  }
+
+  function verifyDLESigmaProofWithCustom2(uint[12] memory points, uint z, uint nonce, uint addr) public view returns(bool) {
+    uint[] memory input = new uint[](6);
+    input[0] = points[0];
+    input[1] = points[1];
+    input[2] = points[2];
+    input[3] = points[3];
+    input[4] = nonce;
+    input[5] = addr;
+    uint e = computeCha(input);
     return verify(points, z, e);
   }
 
@@ -103,6 +122,10 @@ contract DLESigmaVerifier {
     h = h.mul(e).add(A);
 
     return g.X == h.X && g.Y == h.Y;
+  }
+
+  function computeCha(uint[] memory input) internal pure returns(uint) {
+    return uint(keccak256(abi.encodePacked(input))).mod();
   }
 
   function computeChallenge(uint a, uint b, uint c, uint d) internal pure returns(uint) {

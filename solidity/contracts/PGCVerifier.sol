@@ -97,7 +97,7 @@ contract PGCVerifier {
   }
 
   //
-  function verifyAggTransfer(uint[36] memory points, uint[11] memory scalar, uint[12] memory l, uint [12] memory r, uint[4] memory ub) public returns(bool) {
+  function verifyAggTransfer(uint[36] memory points, uint[10] memory scalar, uint[12] memory l, uint [12] memory r, uint[4] memory ub, uint nonce) public returns(bool) {
     CT memory userBalance;
     userBalance.X.X = ub[0];
     userBalance.X.Y = ub[1];
@@ -111,7 +111,7 @@ contract PGCVerifier {
     // verify pte proof.
     // pk1, pk2, ct enc. pte proof.
     // // 7 mul, 4 add.
-    require(sigmaVerifier.verifyPTEProof(b.ptePoints, scalar[1], scalar[2]), "pte equal proof invalid");
+    require(sigmaVerifier.verifyPTEProof(b.ptePoints, scalar[0], scalar[1]), "pte equal proof invalid");
 
     b.ct1.X = BN128.G1Point(points[4], points[5]);
     b.ct1.Y = BN128.G1Point(points[8], points[9]);
@@ -126,7 +126,7 @@ contract PGCVerifier {
     b.dleSigmaPoints[1] = BN128.G1Point(points[26], points[27]);
     // only this failed.
     // 4 mul, 4 add.
-    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[5], 1, scalar[0]), "dle sigma proof failed");
+    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[4], 1, nonce), "dle sigma proof failed");
 
     // verifyCTValidProof.
     b.ctValidPoints[0] = points[0];
@@ -134,7 +134,7 @@ contract PGCVerifier {
     for (b.i = 16; b.i < 24; b.i++) {
       b.ctValidPoints[2+b.i-16] = points[b.i];
     }
-    require(sigmaVerifier.verifyCTValidProof(b.ctValidPoints, scalar[3], scalar[4]), "ct valid proof invalid");
+    require(sigmaVerifier.verifyCTValidProof(b.ctValidPoints, scalar[2], scalar[3]), "ct valid proof invalid");
 
     for (b.i = 0; b.i < 8; b.i++) {
       b.aggRpoints[b.i] = points[28+b.i];
@@ -148,7 +148,7 @@ contract PGCVerifier {
     b.aggRpoints[10] = points[18];
     b.aggRpoints[11] = points[19];
     for (b.i = 0; b.i < 5; b.i++) {
-      b.rscalar[b.i] = scalar[b.i+6];
+      b.rscalar[b.i] = scalar[b.i+5];
     }
     // verify agg range proof.
     require(aggRangeProofVerifier.aggVerifyRangeProof(b.aggRpoints, b.rscalar, l, r), "aggrate range proof invalid");
@@ -208,74 +208,74 @@ contract PGCVerifier {
    * r[2*n-4*n-1]: range proof 2 r.x, r.y.
    */
    // n=5, bitSize=32, 190 mul, 178 add.
-  function verifyTransfer(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint[4] memory ub) public returns(bool) {
+  // function verifyTransfer(uint[28] memory points, uint[14] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint[4] memory ub) public returns(bool) {
 
-    CT memory userBalance;
-    userBalance.X.X = ub[0];
-    userBalance.X.Y = ub[1];
-    userBalance.Y.X = ub[2];
-    userBalance.Y.Y = ub[3];
+  //   CT memory userBalance;
+  //   userBalance.X.X = ub[0];
+  //   userBalance.X.Y = ub[1];
+  //   userBalance.Y.X = ub[2];
+  //   userBalance.Y.Y = ub[3];
 
-    Board memory b;
-    // check v in ct1 == c in ct2.
-    for (b.i = 0; b.i < 20; b.i++) {
-      b.sigmaPoints[b.i] = points[b.i];
-    }
-    // 10 mul, 6 add.
-    require(sigmaVerifier.verifySigmaProof(b.sigmaPoints, scalar[0], scalar[1], scalar[2]), "sigma verify failed");
+  //   Board memory b;
+  //   // check v in ct1 == c in ct2.
+  //   for (b.i = 0; b.i < 20; b.i++) {
+  //     b.sigmaPoints[b.i] = points[b.i];
+  //   }
+  //   // 10 mul, 6 add.
+  //   require(sigmaVerifier.verifySigmaProof(b.sigmaPoints, scalar[0], scalar[1], scalar[2]), "sigma verify failed");
 
-    // check balance updated is same with refreshed balance.
-    b.ct1.X = BN128.G1Point(points[2], points[3]);
-    b.ct1.Y = BN128.G1Point(points[4], points[5]);
-    for (b.i = 0; b.i < 4; b.i++) {
-      b.ct1Points[b.i] = points[2+b.i];
-    }
-    // 2 add.
-    // get tmp balance = alice'balnce - transfer'balance
-    b.tmpUpdatedBalance.X = userBalance.X.add(b.ct1.X.neg());
-    b.tmpUpdatedBalance.Y = userBalance.Y.add(b.ct1.Y.neg());
-    b.refreshBalance.X = BN128.G1Point(points[20], points[21]);
-    b.refreshBalance.Y = BN128.G1Point(points[22], points[23]);
-    b.dleSigmaPoints[0] = BN128.G1Point(points[24], points[25]);
-    b.dleSigmaPoints[1] = BN128.G1Point(points[26], points[27]);
-    // 4 mul, 4 add.
-    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[3], 0, 0), "dle sigma proof failed");
+  //   // check balance updated is same with refreshed balance.
+  //   b.ct1.X = BN128.G1Point(points[2], points[3]);
+  //   b.ct1.Y = BN128.G1Point(points[4], points[5]);
+  //   for (b.i = 0; b.i < 4; b.i++) {
+  //     b.ct1Points[b.i] = points[2+b.i];
+  //   }
+  //   // 2 add.
+  //   // get tmp balance = alice'balnce - transfer'balance
+  //   b.tmpUpdatedBalance.X = userBalance.X.add(b.ct1.X.neg());
+  //   b.tmpUpdatedBalance.Y = userBalance.Y.add(b.ct1.Y.neg());
+  //   b.refreshBalance.X = BN128.G1Point(points[20], points[21]);
+  //   b.refreshBalance.Y = BN128.G1Point(points[22], points[23]);
+  //   b.dleSigmaPoints[0] = BN128.G1Point(points[24], points[25]);
+  //   b.dleSigmaPoints[1] = BN128.G1Point(points[26], points[27]);
+  //   // 4 mul, 4 add.
+  //   require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[3], 0, 0), "dle sigma proof failed");
 
-    // check range proof 1.
-    for (b.i = 0; b.i < 8; b.i++) {
-      b.rpoints[b.i] = rpoints[b.i];
-    }
-    // set ct1.Y (commitment).
-    b.rpoints[8] = points[4];
-    b.rpoints[9] = points[5];
-    for (b.i = 0; b.i < 2*n; b.i++) {
-      b.l[b.i] = l[b.i];
-      b.r[b.i] = r[b.i];
-    }
-    for (b.i = 0; b.i < 5; b.i++) {
-      b.rscalar[b.i] = scalar[4+b.i];
-    }
-    // 2*(bitSize+n)+14 mul, 2*(bitSize+n)+9 add.
-    require(rangeProofVerifier.optimizedVerifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 1 failed");
+  //   // check range proof 1.
+  //   for (b.i = 0; b.i < 8; b.i++) {
+  //     b.rpoints[b.i] = rpoints[b.i];
+  //   }
+  //   // set ct1.Y (commitment).
+  //   b.rpoints[8] = points[4];
+  //   b.rpoints[9] = points[5];
+  //   for (b.i = 0; b.i < 2*n; b.i++) {
+  //     b.l[b.i] = l[b.i];
+  //     b.r[b.i] = r[b.i];
+  //   }
+  //   for (b.i = 0; b.i < 5; b.i++) {
+  //     b.rscalar[b.i] = scalar[4+b.i];
+  //   }
+  //   // 2*(bitSize+n)+14 mul, 2*(bitSize+n)+9 add.
+  //   require(rangeProofVerifier.optimizedVerifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 1 failed");
 
-    // check range proof 2.
-    for (b.i = 0; b.i < 8; b.i++) {
-      b.rpoints[b.i] = rpoints[8+b.i];
-    }
-    b.rpoints[8] = points[22];
-    b.rpoints[9] = points[23];
-    for (b.i = 0; b.i < 2*n; b.i++) {
-      b.l[b.i] = l[b.i+2*n];
-      b.r[b.i] = r[b.i+2*n];
-    }
-    for (b.i = 0; b.i < 5; b.i++) {
-      b.rscalar[b.i] = scalar[9+b.i];
-    }
-    // 2*(bitSize+n)+14 mul, 2*(bitSize+n)+9 add.
-    require(rangeProofVerifier.optimizedVerifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 2 verify failed");
+  //   // check range proof 2.
+  //   for (b.i = 0; b.i < 8; b.i++) {
+  //     b.rpoints[b.i] = rpoints[8+b.i];
+  //   }
+  //   b.rpoints[8] = points[22];
+  //   b.rpoints[9] = points[23];
+  //   for (b.i = 0; b.i < 2*n; b.i++) {
+  //     b.l[b.i] = l[b.i+2*n];
+  //     b.r[b.i] = r[b.i+2*n];
+  //   }
+  //   for (b.i = 0; b.i < 5; b.i++) {
+  //     b.rscalar[b.i] = scalar[9+b.i];
+  //   }
+  //   // 2*(bitSize+n)+14 mul, 2*(bitSize+n)+9 add.
+  //   require(rangeProofVerifier.optimizedVerifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 2 verify failed");
 
-    return true;
-  }
+  //   return true;
+  // }
 
   /*
    * @dev burn part amount of a pgc accunt.
@@ -325,99 +325,78 @@ contract PGCVerifier {
    * l[2*n-4*n-1]: range proof 2 l.x, l.y.
    * r[2*n-4*n-1]: range proof 2 r.x, r.y.
    */
-  function verifyBurnPart(uint amount, uint[18] memory points, uint[12] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint[4] memory ub) public returns(bool) {
+  // function verifyBurnPart(uint amount, uint[18] memory points, uint[12] memory scalar, uint[16] memory rpoints, uint[4*n] memory l, uint[4*n] memory r, uint[4] memory ub) public returns(bool) {
+  //   CT memory userBalance;
+  //   userBalance.X.X = ub[0];
+  //   userBalance.X.Y = ub[1];
+  //   userBalance.Y.X = ub[2];
+  //   userBalance.Y.Y = ub[3];
+
+  //   Board memory b;
+  //   b.ct1.X = BN128.G1Point(points[2], points[3]);
+  //   b.ct1.Y = BN128.G1Point(points[4], points[5]);
+  //   b.proof[0] = points[10];
+  //   b.proof[1] = points[11];
+  //   b.proof[2] = points[12];
+  //   b.proof[3] = points[13];
+  //   // check amount is same with value in ct.
+  //   // require(verifyEqualProof(amount, b.ct1, BN128.G1Point(points[0], points[1]), b.proof, scalar[0], 0, 0, 0), "dle sigma proof 1 failed");
+
+  //   // check balance updated is ame with refreshed balance.
+  //   b.ct1.X = BN128.G1Point(points[2], points[3]);
+  //   b.ct1.Y = BN128.G1Point(points[4], points[5]);
+  //   // tmp balance = alice'balance - burn balance.
+  //   b.tmpUpdatedBalance.X = userBalance.X.add(b.ct1.X.neg());
+  //   b.tmpUpdatedBalance.Y = userBalance.Y.add(b.ct1.Y.neg());
+  //   b.refreshBalance.X = BN128.G1Point(points[6], points[7]);
+  //   b.refreshBalance.Y = BN128.G1Point(points[8], points[9]);
+  //   b.dleSigmaPoints[0] = BN128.G1Point(points[14], points[15]);
+  //   b.dleSigmaPoints[1] = BN128.G1Point(points[16], points[17]);
+  //   require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[1], 0, 0), "dle sigma proof 2 failed");
+
+  //   // check range proof 1.
+  //   for (b.i = 0; b.i < 8; b.i++) {
+  //     b.rpoints[b.i] = rpoints[b.i];
+  //   }
+  //   // set ct.y
+  //   b.rpoints[8] = points[4];
+  //   b.rpoints[9] = points[5];
+  //   for (b.i = 0; b.i < 2*n; b.i++ ) {
+  //     b.l[b.i] = l[b.i];
+  //     b.r[b.i] = r[b.i];
+  //   }
+  //   for (b.i = 0; b.i < 5; b.i++ ) {
+  //     b.rscalar[b.i] = scalar[b.i+2];
+  //   }
+  //   require(rangeProofVerifier.optimizedVerifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 1 failed");
+
+  //   // check range proof 2.
+  //   for (b.i = 0; b.i < 8; b.i++ ) {
+  //     b.rpoints[b.i] = rpoints[8+b.i];
+  //   }
+  //   b.rpoints[8] = points[8];
+  //   b.rpoints[9] = points[9];
+  //   for (b.i = 0; b.i < 2*n; b.i++ ) {
+  //     b.l[b.i] = l[b.i+2*n];
+  //     b.r[b.i] = r[b.i+2*n];
+  //   }
+  //   for (b.i = 0; b.i < 5; b.i++ ) {
+  //     b.rscalar[b.i] = scalar[7+b.i];
+  //   }
+  //   require(rangeProofVerifier.optimizedVerifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 2 verify failed");
+
+  //   return true;
+  // }
+
+  function verifyBurn(uint amount, uint[2] memory publicKey, uint[4] memory proof, uint z, uint[4] memory ub, uint[] memory input) public returns(bool) {
     CT memory userBalance;
     userBalance.X.X = ub[0];
     userBalance.X.Y = ub[1];
     userBalance.Y.X = ub[2];
     userBalance.Y.Y = ub[3];
-
-    Board memory b;
-    b.ct1.X = BN128.G1Point(points[2], points[3]);
-    b.ct1.Y = BN128.G1Point(points[4], points[5]);
-    b.proof[0] = points[10];
-    b.proof[1] = points[11];
-    b.proof[2] = points[12];
-    b.proof[3] = points[13];
-    // check amount is same with value in ct.
-    require(verifyEqualProof(amount, b.ct1, BN128.G1Point(points[0], points[1]), b.proof, scalar[0], 0, 0, 0), "dle sigma proof 1 failed");
-
-    // check balance updated is ame with refreshed balance.
-    b.ct1.X = BN128.G1Point(points[2], points[3]);
-    b.ct1.Y = BN128.G1Point(points[4], points[5]);
-    // tmp balance = alice'balance - burn balance.
-    b.tmpUpdatedBalance.X = userBalance.X.add(b.ct1.X.neg());
-    b.tmpUpdatedBalance.Y = userBalance.Y.add(b.ct1.Y.neg());
-    b.refreshBalance.X = BN128.G1Point(points[6], points[7]);
-    b.refreshBalance.Y = BN128.G1Point(points[8], points[9]);
-    b.dleSigmaPoints[0] = BN128.G1Point(points[14], points[15]);
-    b.dleSigmaPoints[1] = BN128.G1Point(points[16], points[17]);
-    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[1], 0, 0), "dle sigma proof 2 failed");
-
-    // check range proof 1.
-    for (b.i = 0; b.i < 8; b.i++) {
-      b.rpoints[b.i] = rpoints[b.i];
-    }
-    // set ct.y
-    b.rpoints[8] = points[4];
-    b.rpoints[9] = points[5];
-    for (b.i = 0; b.i < 2*n; b.i++ ) {
-      b.l[b.i] = l[b.i];
-      b.r[b.i] = r[b.i];
-    }
-    for (b.i = 0; b.i < 5; b.i++ ) {
-      b.rscalar[b.i] = scalar[b.i+2];
-    }
-    require(rangeProofVerifier.optimizedVerifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 1 failed");
-
-    // check range proof 2.
-    for (b.i = 0; b.i < 8; b.i++ ) {
-      b.rpoints[b.i] = rpoints[8+b.i];
-    }
-    b.rpoints[8] = points[8];
-    b.rpoints[9] = points[9];
-    for (b.i = 0; b.i < 2*n; b.i++ ) {
-      b.l[b.i] = l[b.i+2*n];
-      b.r[b.i] = r[b.i+2*n];
-    }
-    for (b.i = 0; b.i < 5; b.i++ ) {
-      b.rscalar[b.i] = scalar[7+b.i];
-    }
-    require(rangeProofVerifier.optimizedVerifyRangeProof(b.rpoints, b.rscalar, b.l, b.r), "range proof 2 verify failed");
-
-    return true;
-  }
-
-  function verifyBurnETH(uint amount, uint[2] memory publicKey, uint[4] memory proof, uint z, uint[4] memory ub, uint nonce, uint addr) public returns(bool) {
-    CT memory userBalance;
-    userBalance.X.X = ub[0];
-    userBalance.X.Y = ub[1];
-    userBalance.Y.X = ub[2];
-    userBalance.Y.Y = ub[3];
-    // todo: check not zero.
 
     // Board memory board;
-    // revert when error.
-    require(verifyEqualProof(amount, userBalance, BN128.G1Point(publicKey[0], publicKey[1]), proof, z, 1, nonce, addr), "dle sigma verify failed");
-
-    return true;
-  }
-
-  /*
-   * @dev check burn all proof.
-   */
-  function verifyBurn(uint amount, uint[2] memory publicKey, uint[4] memory proof, uint z, uint[4] memory ub) public view returns(bool) {
-    // compute y' = Y - g*m.
-    CT memory userBalance;
-    userBalance.X.X = ub[0];
-    userBalance.X.Y = ub[1];
-    userBalance.Y.X = ub[2];
-    userBalance.Y.Y = ub[3];
-    // todo: check not zero.
-
-    Board memory board;
-    // revert when error.
-    require(verifyEqualProof(amount, userBalance, BN128.G1Point(publicKey[0], publicKey[1]), proof, z, 0, 0, 0), "dle sigma verify failed");
+    require(verifyEqualProof(amount, userBalance, BN128.G1Point(publicKey[0], publicKey[1]), proof, z, input), "dle sigma verify failed");
 
     return true;
   }
@@ -447,7 +426,7 @@ contract PGCVerifier {
     }
   }
 
-   function verifyEqualProof(uint amount, CT memory ct, BN128.G1Point memory pk, uint[4] memory proof, uint z, uint t, uint nonce, uint addr) internal view returns(bool) {
+   function verifyEqualProof(uint amount, CT memory ct, BN128.G1Point memory pk, uint[4] memory proof, uint z, uint[] memory input) internal view returns(bool) {
     BN128.G1Point memory y = ct.Y.add(g.mul(amount).neg());
     Board memory board;
     board.dleTmpPoints[0] = proof[0];
@@ -463,17 +442,6 @@ contract PGCVerifier {
     board.dleTmpPoints[10] = pk.X;
     board.dleTmpPoints[11] = pk.Y;
 
-    if (t == 0) {
-      return dleSigmaVerifier.verifyDLESigmaProof(board.dleTmpPoints, z);
-    }
-    if (t == 1) {
-      return dleSigmaVerifier.verifyDLESigmaProofWithCustom(board.dleTmpPoints, z, nonce, addr);
-    }
-    }
-
-    
-
-  function computeChallenge(uint a, uint b, uint c, uint d) internal pure returns(uint) {
-    return uint(keccak256(abi.encodePacked(a, b, c, d))).mod();
+    return dleSigmaVerifier.verifyDLESigmaProofWithCustom(board.dleTmpPoints, z, input);
   }
 }
