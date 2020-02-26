@@ -196,7 +196,7 @@ func GenerateRangeProof(params RangeParams, v, random *big.Int) (*RangeProof, er
 	if err != nil {
 		return nil, err
 	}
-	z, err := utils.ComputeChallenge(n, y)
+	z, err := utils.ComputeChallenge(n, commitB.X, commitB.Y, commitA.X, commitA.Y)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +323,7 @@ func VerifyRangeProof(params RangeParams, v *utils.ECPoint, proof *RangeProof) b
 	}
 	yn := utils.PowVector(y, n, size)
 
-	z, err := utils.ComputeChallenge(n, y)
+	z, err := utils.ComputeChallenge(n, proof.S.X, proof.S.Y, proof.A.X, proof.A.Y)
 	if err != nil {
 		log.Warn("compute challenge z failed", "error", err)
 		return false
@@ -385,7 +385,7 @@ func OptimizedVerifyRangeProof(params RangeParams, v *utils.ECPoint, proof *Rang
 	}
 	ynInverse := utils.PowVector(new(big.Int).ModInverse(y, n), n, size)
 
-	z, err := utils.ComputeChallenge(n, y)
+	z, err := utils.ComputeChallenge(n, proof.S.X, proof.S.Y, proof.A.X, proof.A.Y)
 	if err != nil {
 		log.Warn("compute challenge z failed", "error", err)
 		return false

@@ -56,7 +56,13 @@ func GeneratePTEqualityProof(params BaseParams, pk1, pk2 *ecdsa.PublicKey, ct *M
 	proof.A2 = new(utils.ECPoint).SetFromPublicKey(pk2)
 	proof.A2.ScalarMult(proof.A2, a)
 
-	e, err := utils.ComputeChallengeByECPoints(curve.Params().N, proof.A1, proof.A2)
+	// B = g*b + h*a.
+	g := params.G()
+	h := params.H()
+	proof.B = new(utils.ECPoint).ScalarMult(g, b)
+	proof.B.Add(proof.B, new(utils.ECPoint).ScalarMult(h, a))
+
+	e, err := utils.ComputeChallengeByECPoints(curve.Params().N, proof.A1, proof.A2, proof.B)
 	if err != nil {
 		return nil, err
 	}
@@ -75,12 +81,6 @@ func GeneratePTEqualityProof(params BaseParams, pk1, pk2 *ecdsa.PublicKey, ct *M
 	proof.Z2.Add(proof.Z2, b)
 	proof.Z2.Mod(proof.Z2, n)
 
-	// B = g*b + h*a.
-	g := params.G()
-	h := params.H()
-	proof.B = new(utils.ECPoint).ScalarMult(g, b)
-	proof.B.Add(proof.B, new(utils.ECPoint).ScalarMult(h, a))
-
 	return &proof, nil
 }
 
@@ -89,7 +89,7 @@ func VerifyPTEqualityProof(params BaseParams, pk1, pk2 *ecdsa.PublicKey, ct *MRT
 	curve := pk1.Curve
 	n := curve.Params().N
 	// compute challenge.
-	e, err := utils.ComputeChallengeByECPoints(n, proof.A1, proof.A2)
+	e, err := utils.ComputeChallengeByECPoints(n, proof.A1, proof.A2, proof.B)
 	if err != nil {
 		log.Warn("verify pteequality proof failed(compute challenge)", "err", err)
 		return false

@@ -162,7 +162,7 @@ contract AggRangeProofVerifier {
     Board memory board;
     // compute
     board.y = computeChallenge(rangeProof.A.X, rangeProof.A.Y, rangeProof.S.X, rangeProof.S.Y);
-    board.z = computeChallenge2(board.y);
+    board.z = computeChallenge(rangeProof.S.X, rangeProof.S.Y, rangeProof.A.X, rangeProof.A.Y);
     board.yn = powers(board.y);
     board.ynInverse = powers(board.y.inv());
     board.zNeg = board.z.neg();
@@ -270,10 +270,6 @@ contract AggRangeProofVerifier {
 
   function computeChallenge(uint a, uint b, uint c, uint d) internal pure returns(uint) {
     return uint(keccak256(abi.encodePacked(a, b, c, d))).mod();
-  }
-
-  function computeChallenge2(uint a) internal pure returns(uint) {
-    return uint(keccak256(abi.encodePacked(a))).mod();
   }
 
   /*

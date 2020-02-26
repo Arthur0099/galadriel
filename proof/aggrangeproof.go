@@ -247,7 +247,7 @@ func GenerateAggRangeProof(params AggRangeParams, v, random []*big.Int) (*AggRan
 	if err != nil {
 		return nil, err
 	}
-	z, err := utils.ComputeChallenge(n, y)
+	z, err := utils.ComputeChallenge(n, commitB.X, commitB.Y, commitA.X, commitA.Y)
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +392,7 @@ func VerifyAggRangeProof(params AggRangeParams, v []*utils.ECPoint, proof *AggRa
 	}
 	ymn := utils.PowVector(y, n, size)
 
-	z, err := utils.ComputeChallenge(n, y)
+	z, err := utils.ComputeChallenge(n, proof.S.X, proof.S.Y, proof.A.X, proof.A.Y)
 	if err != nil {
 		log.Warn("compute challenge z failed", "error", err)
 		return false
@@ -464,7 +464,7 @@ func OptimizedVerifyAggRangeProof(params AggRangeParams, v []*utils.ECPoint, pro
 	}
 	ymnInverse := utils.PowVector(new(big.Int).ModInverse(y, n), n, size)
 
-	z, err := utils.ComputeChallenge(n, y)
+	z, err := utils.ComputeChallenge(n, proof.S.X, proof.S.Y, proof.A.X, proof.A.Y)
 	if err != nil {
 		log.Warn("compute challenge z failed", "error", err)
 		return false

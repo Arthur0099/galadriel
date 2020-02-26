@@ -37,7 +37,11 @@ contract SigmaVerifier {
   // 7 mul, 4 add.
   function verifyPTEProof(uint[16] memory points, uint z1, uint z2) public returns(bool) {
     uint e;
-    e = computeC(points[10], points[11], points[12], points[13]);
+    uint[] memory ps = new uint[](6);
+    for (uint i = 0; i < 6; i++) {
+      ps[i] = points[10+i];
+    }
+    e = compute(ps);
 
     // 2 mul, 1 add.
     // check pk1 * z1 == A1 + X1 * e.
@@ -109,7 +113,11 @@ contract SigmaVerifier {
   function verifySigmaProof(uint[20] memory points, uint z1, uint z2, uint z3) public view returns(bool) {
     uint e;
     // compute challenge e.
-    e = computeChallenge(points[12], points[13], points[14], points[15], points[16], points[17], points[18], points[19]);
+    uint[] memory ps = new uint[](8);
+    for (uint i = 0; i < 8; i++) {
+      ps[i] = points[i+12];
+    }
+    e = compute(ps);
 
     // check pk1 * z1 == A1 + X1 * e.
     BN128.G1Point[3] memory point1;
@@ -178,9 +186,8 @@ contract SigmaVerifier {
     return want.X == actual.X && want.Y == actual.Y;
   }
 
-  // compute challenge for proof.
-  function computeChallenge(uint a, uint b, uint c, uint d, uint e, uint f, uint i, uint j) internal pure returns(uint) {
-    return uint(keccak256(abi.encodePacked(a, b, c, d, e, f, i, j))).mod();
+  function compute(uint[] memory points) internal pure returns(uint) {
+    return uint(keccak256(abi.encodePacked(points))).mod();
   }
 
   function computeC(uint a, uint b, uint c, uint d) internal returns(uint) {

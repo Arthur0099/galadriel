@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/pgc/utils"
 )
 
 const (
@@ -59,7 +61,7 @@ func GenerateGoCode(newFlag bool) {
 		path := filepath.Join(ContractsPath, v["name"]+".json")
 		files := generateGoCode(path, v["name"], newFlag)
 		for _, f := range files {
-			Delete(f)
+			utils.Delete(f)
 		}
 	}
 }
@@ -71,14 +73,14 @@ func GenerateJavaCode(flag bool) {
 		files := generateJavaCode(path, v["name"])
 		if flag {
 			for _, f := range files {
-				Delete(f)
+				utils.Delete(f)
 			}
 		}
 	}
 }
 
 func generateGoCode(path, name string, newFlag bool) []string {
-	raw := Read(path)
+	raw := utils.Read(path)
 
 	var data map[string]interface{}
 	if err := json.Unmarshal(raw, &data); err != nil {
@@ -105,8 +107,8 @@ func generateGoCode(path, name string, newFlag bool) []string {
 		outName = filepath.Join("./contracts", name+".go")
 	}
 
-	Write(abiName, abiRaw)
-	Write(binName, trimBin)
+	utils.Write(abiName, abiRaw)
+	utils.Write(binName, trimBin)
 
 	cmd := "./abigen"
 	command := exec.Command(cmd, "--bin", binName, "--abi", abiName, "--pkg", "contracts", "--out", outName, "--type", name)
@@ -123,7 +125,7 @@ func generateGoCode(path, name string, newFlag bool) []string {
 }
 
 func generateJavaCode(path, name string) []string {
-	raw := Read(path)
+	raw := utils.Read(path)
 
 	var data map[string]interface{}
 	if err := json.Unmarshal(raw, &data); err != nil {
@@ -143,8 +145,8 @@ func generateJavaCode(path, name string) []string {
 	abiName := name + ".abi"
 	binName := name + ".bin"
 
-	Write(abiName, abiRaw)
-	Write(binName, trimBin)
+	utils.Write(abiName, abiRaw)
+	utils.Write(binName, trimBin)
 
 	cmd := "/home/ubuntu/web3j-3.6.0/bin/web3j"
 	command := exec.Command(cmd, "solidity", "generate", binName, abiName, "-p", "contracts", "-o", "./contracts/java")
