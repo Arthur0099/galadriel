@@ -52,7 +52,7 @@ func TestAggRangeProofContractVerify(t *testing.T) {
 }
 
 func testAggRangeProofContractVerify(t *testing.T, v []*big.Int, expect bool, aggCon *contracts.Aggrangeproofverifier) {
-	params := DAggRangeProofParams()
+	params := DAggRangeProofParamsWithBitsize(64)
 	p, r := newRandomCommitmentsAggRangeProof(params, v)
 
 	proof, err := GenerateAggRangeProof(params, v, r)

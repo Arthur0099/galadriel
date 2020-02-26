@@ -31,8 +31,12 @@ type rangeParams struct {
 // DRangeProofParams returns params for pgc/solidity system to genrate
 // verify single range proofs.
 func DRangeProofParams() RangeParams {
+	return DRangeProofParamsWithBitsize(32)
+}
+
+// DRangeProofParamsWithBitsize returns range params with bitsize.
+func DRangeProofParamsWithBitsize(bitsize int) RangeParams {
 	curve := curve.BN256()
-	bitsize := 32
 	g := "g generator of twisted elg"
 	gpoint := utils.NewECPointByString(g, curve)
 
@@ -115,7 +119,7 @@ type RangeProof struct {
 type rangeProofInput struct {
 	points [10]*big.Int
 	scalar [5]*big.Int
-	l, r   [10]*big.Int
+	l, r   [2 * N]*big.Int
 	ll, rr []*big.Int
 }
 

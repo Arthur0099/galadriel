@@ -39,7 +39,7 @@ func TestPGCSystemContractTokenLocal(t *testing.T) {
 
 func testPGCSystemContract(t *testing.T, tokenTest bool, auth *bind.TransactOpts, ethclient *ethclient.Client) {
 	addrs, pgc := deployer.DeployPGCSystemAllContract(auth, ethclient)
-	params := proof.DAggRangeProofParams()
+	params := proof.DAggRangeProofParamsWithBitsize(64)
 
 	token := common.Address{}
 	if tokenTest {

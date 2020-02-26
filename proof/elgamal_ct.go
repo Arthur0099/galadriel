@@ -401,11 +401,13 @@ func decryptEncodedMsg(params CTParams, encodeMsg *utils.ECPoint) []byte {
 	g := params.G()
 
 	// todo: uint64 may not enough if bit size bigger than 64.
-	for i := uint64(0); i < upperLimit.Uint64(); i++ {
-		point := new(utils.ECPoint).ScalarMult(g, new(big.Int).SetUint64(i))
+	for i := new(big.Int).SetUint64(0); i.Cmp(upperLimit) == -1; {
+		point := new(utils.ECPoint).ScalarMult(g, i)
 		if point.Equal(encodeMsg) {
-			return new(big.Int).SetUint64(i).Bytes()
+			return i.Bytes()
 		}
+
+		i = new(big.Int).Add(i, utils.One)
 	}
 
 	return []byte{}

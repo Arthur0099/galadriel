@@ -45,8 +45,22 @@ func newRandomAggRangeParams(curve elliptic.Curve, bitsize, aggsize int) AggRang
 // DAggRangeProofParams returns default params for pgc/solidity system to genrate
 // verify all proofs.
 func DAggRangeProofParams() AggRangeParams {
+	return DAggRangeProofParamsWithBitsize(32)
+}
+
+const (
+	// Bitsize only change to fit solidity input size.
+	Bitsize = 64
+	// N : 2^N = 64.
+	N    = 6
+	step = 1
+	// LRsize is the size of l, r
+	LRsize = N + step
+)
+
+// DAggRangeProofParamsWithBitsize return default params with bitsize.
+func DAggRangeProofParamsWithBitsize(bitsize int) AggRangeParams {
 	curve := curve.BN256()
-	bitsize := 32
 	aggsize := 2
 	g := "g generator of twisted elg"
 	gpoint := utils.NewECPointByString(g, curve)
@@ -122,8 +136,7 @@ type AggRangeProof struct {
 type aggRangeProofInput struct {
 	points [12]*big.Int
 	scalar [5]*big.Int
-	l      [12]*big.Int
-	r      [12]*big.Int
+	l, r   [2 * LRsize]*big.Int
 }
 
 // T returns t.

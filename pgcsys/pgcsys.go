@@ -29,7 +29,7 @@ type ConfidentialTx struct {
 type solidityPGCInput struct {
 	points [36]*big.Int
 
-	l, r [12]*big.Int
+	l, r [proof.LRsize * 2]*big.Int
 
 	scalars [10]*big.Int
 }

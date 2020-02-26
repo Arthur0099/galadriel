@@ -9,9 +9,9 @@ contract RangeProofVerifier {
   using BN128 for uint;
 
    // bit size of value.
-  uint public constant bitSize = 32;
+  uint public constant bitSize = 64;
   // number of inner product points.
-  uint public constant n = 5;
+  uint public constant n = 6;
 
   // public params contract.
   PublicParams public params;

@@ -44,7 +44,7 @@ func TestRangeProofContractVerify(t *testing.T) {
 }
 
 func testRangeProofContractVerify(t *testing.T, v *big.Int, expect bool, proofCon *contracts.Rangeproofverifier) {
-	params := DRangeProofParams()
+	params := DRangeProofParamsWithBitsize(64)
 	p, r := newRandomCommitmentsRangeProof(params, v)
 
 	proof, err := GenerateRangeProof(params, v, r)

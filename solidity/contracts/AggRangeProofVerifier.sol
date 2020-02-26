@@ -8,9 +8,9 @@ contract AggRangeProofVerifier {
   using BN128 for uint;
 
    // bit size of value.
-  uint constant bitSize = 32;
+  uint constant bitSize = 64;
   // number of inner product points.
-  uint constant n = 5;
+  uint constant n = 6;
   // agg size.
   uint constant aggSize = 2;
   // 2^step = aggSize

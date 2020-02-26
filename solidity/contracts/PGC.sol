@@ -98,9 +98,13 @@ contract PGC {
   mapping(uint => mapping(uint => uint)) pendingFunNonce;
 
   // bitSize of balance value.
-  uint public constant bitSize = 32;
-  uint public constant n = 5;
+  uint public constant bitSize = 64;
+  uint public constant n = 6;
   uint public constant maxNumber = 2**bitSize;
+  // 2^step = aggSize
+  uint constant step = 1;
+  // proof l, r size.
+  uint constant lrSize = n+step;
 
   // public h point.
   BN128.G1Point public h;
@@ -204,7 +208,7 @@ contract PGC {
     return true;
   }
 
-  function aggTransferETH(uint[36] memory points, uint[10] memory scalar, uint[12] memory l, uint [12] memory r) public returns (bool) {
+  function aggTransferETH(uint[36] memory points, uint[10] memory scalar, uint[2*lrSize] memory l, uint [2*lrSize] memory r) public returns (bool) {
       aggTransfer(points, scalar, 0, l, r);
   }
 
@@ -243,7 +247,7 @@ contract PGC {
    * l[0-11]: agg range proof l.x, l.y.
    * r[0-11]: agg range proof r.x, r.y.
    */
-  function aggTransfer(uint[36] memory points, uint[10] memory scalar, uint token, uint[12] memory l, uint [12] memory r) public returns (bool) {
+  function aggTransfer(uint[36] memory points, uint[10] memory scalar, uint token, uint[2*lrSize] memory l, uint [2*lrSize] memory r) public returns (bool) {
     Board memory b;
 
     // nonce used for computing hash. no need to check.

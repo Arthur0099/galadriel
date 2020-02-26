@@ -15,9 +15,9 @@ contract PublicParams {
 
   // bit size for vector.
   // value range [0, 2^bitSize-1]
-  uint public constant bitSize = 32;
+  uint public constant bitSize = 64;
   // 2^n=bitSize; n is the number of ecpoints in innerproduct.
-  uint public constant n = 5;
+  uint public constant n = 6;
   // aggSize for agg range proof. must be pow of 2.
   uint public constant aggSize = 2;
 

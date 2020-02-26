@@ -48,18 +48,3 @@ func (a *Account) UpdateBalance(nonce *big.Int, ct [4]*big.Int) {
 	balance := proof.Decrypt(a.params, a.sk, a.balance)
 	a.m = new(big.Int).SetBytes(balance)
 }
-
-// // UpdateBalanceSn .
-// func (a *Account) UpdateBalanceSn(m *big.Int) {
-// 	a.m.Set(m)
-// }
-
-// func (a *Account) Copy() *Account {
-// 	b := Account{}
-// 	b.balance = a.balance
-// 	b.m = a.m
-// 	b.name = a.name
-// 	b.nonce = a.nonce
-// 	b.sk = a.sk
-// 	return &b
-// }

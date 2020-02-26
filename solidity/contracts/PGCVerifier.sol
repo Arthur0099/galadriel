@@ -13,9 +13,13 @@ contract PGCVerifier {
   using BN128 for uint;
 
   // bitSize of balance value.
-  uint public constant bitSize = 32;
-  uint public constant n = 5;
+  uint public constant bitSize = 64;
+  uint public constant n = 6;
   uint public constant maxNumber = 2**bitSize;
+  // 2^step = aggSize
+  uint constant step = 1;
+  // proof l, r size.
+  uint constant lrSize = n+step;
 
   // public h point.
   BN128.G1Point public h;
@@ -97,7 +101,7 @@ contract PGCVerifier {
   }
 
   //
-  function verifyAggTransfer(uint[36] memory points, uint[10] memory scalar, uint[12] memory l, uint [12] memory r, uint[4] memory ub, uint nonce) public returns(bool) {
+  function verifyAggTransfer(uint[36] memory points, uint[10] memory scalar, uint[2*lrSize] memory l, uint [2*lrSize] memory r, uint[4] memory ub, uint nonce) public returns(bool) {
     CT memory userBalance;
     userBalance.X.X = ub[0];
     userBalance.X.Y = ub[1];
