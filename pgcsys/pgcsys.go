@@ -129,7 +129,20 @@ func CreateConfidentialTx(params proof.AggRangeParams, alice *Account, bob *ecds
 		return nil, err
 	}
 	ctx.refreshBalance = refreshBalanceCT.CopyPublicPoint()
-	ctx.sigmaDlogeqProof, err = proof.GenerateDLESigmaProof(params, updateBalanceCT, ctx.refreshBalance, alice.sk, ctx.nonce)
+	customs := make([]*big.Int, 0)
+	customs = append(customs, ctx.nonce)
+	customs = append(customs, alicePublicKey.X)
+	customs = append(customs, alicePublicKey.Y)
+	customs = append(customs, bob.X)
+	customs = append(customs, bob.Y)
+	customs = append(customs, ctx.transfer.X1.X)
+	customs = append(customs, ctx.transfer.X1.Y)
+	customs = append(customs, ctx.transfer.X2.X)
+	customs = append(customs, ctx.transfer.X2.Y)
+	customs = append(customs, ctx.transfer.Y.X)
+	customs = append(customs, ctx.transfer.Y.Y)
+	ctx.sigmaDlogeqProof, err = proof.GenerateDLESigmaProof(params, updateBalanceCT, ctx.refreshBalance,
+		alice.sk, customs...)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +176,19 @@ func VerifyConfidentialTx(params proof.AggRangeParams, ctx *ConfidentialTx) bool
 
 	updatedBalance := new(proof.CTEncPoint).Sub(ctx.balance, ctx.transfer.First())
 
-	if !proof.VerifyDLESigmaProof(params, updatedBalance, ctx.refreshBalance, ctx.pk1.ToPublicKey(), ctx.sigmaDlogeqProof, ctx.nonce) {
+	customs := make([]*big.Int, 0)
+	customs = append(customs, ctx.nonce)
+	customs = append(customs, ctx.pk1.X)
+	customs = append(customs, ctx.pk1.Y)
+	customs = append(customs, ctx.pk2.X)
+	customs = append(customs, ctx.pk2.Y)
+	customs = append(customs, ctx.transfer.X1.X)
+	customs = append(customs, ctx.transfer.X1.Y)
+	customs = append(customs, ctx.transfer.X2.X)
+	customs = append(customs, ctx.transfer.X2.Y)
+	customs = append(customs, ctx.transfer.Y.X)
+	customs = append(customs, ctx.transfer.Y.Y)
+	if !proof.VerifyDLESigmaProof(params, updatedBalance, ctx.refreshBalance, ctx.pk1.ToPublicKey(), ctx.sigmaDlogeqProof, customs...) {
 		log.Warn("verify dle sigma proof failed")
 		return false
 	}

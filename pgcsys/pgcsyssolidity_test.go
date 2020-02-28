@@ -2,6 +2,7 @@ package pgcsys
 
 import (
 	"math/big"
+	"os"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -20,6 +21,44 @@ import (
 var (
 	precision = new(big.Int).SetUint64(100)
 )
+
+func skipRopsten(t *testing.T) {
+	if os.Getenv("ropsten") != "true" {
+		t.Skip("skip tesing for ropsten")
+	}
+}
+
+func skipMainnet(t *testing.T) {
+	if os.Getenv("mainnet") != "true" {
+		t.Skip("skip deploy for mainnet")
+	}
+}
+
+func TestDeployPGCToMainnet(t *testing.T) {
+	skipMainnet(t)
+
+	mainnetURL := os.Getenv("mainnetURL")
+	deployerKey := os.Getenv("deployerKey")
+
+	ethclient := client.GetClient(mainnetURL)
+	auth := client.GetAccountWithKey(deployerKey)
+	auth.GasLimit = 7500000
+	addrs, _ := deployer.DeployPGCSystemAllContract(auth, ethclient)
+
+	// set for tokens.
+	token := setForToken(t, addrs, auth, ethclient)
+	log.Info("token contract", "addr", token.Hex())
+}
+
+func TestPGCSystemContractETHRopsten(t *testing.T) {
+	skipRopsten(t)
+
+	ethclient := client.GetRopstenInfura()
+	// replace with account.
+	auth := client.GetRopstenAccount()
+
+	testPGCSystemContract(t, false, auth, ethclient)
+}
 
 func TestPGCSystemContractETHLocal(t *testing.T) {
 	rpcclient := client.GetLocalRPC()

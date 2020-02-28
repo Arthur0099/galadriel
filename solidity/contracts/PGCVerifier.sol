@@ -76,6 +76,7 @@ contract PGCVerifier {
     uint[2*n] r;
     uint[12] ll;
     uint[12] rr;
+    uint[] input;
 
     // for log event.
     uint[4] fromto;
@@ -130,7 +131,12 @@ contract PGCVerifier {
     b.dleSigmaPoints[1] = BN128.G1Point(points[26], points[27]);
     // only this failed.
     // 4 mul, 4 add.
-    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[4], 1, nonce), "dle sigma proof failed");
+    b.input = new uint[](11);
+    b.input[0] = nonce;
+    for (b.i = 0; b.i < 10; b.i++) {
+      b.input[b.i+1] = points[b.i];
+    }
+    require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[4], 1, b.input), "dle sigma proof failed");
 
     // verifyCTValidProof.
     b.ctValidPoints[0] = points[0];
@@ -406,7 +412,7 @@ contract PGCVerifier {
   }
 
   // 4 mul, 4 add.
-  function verifyDLESigmaProof(CT memory ori, CT memory refresh, BN128.G1Point[2] memory p, uint pkx, uint pky, uint z, uint t, uint nonce) internal view returns(bool) {
+  function verifyDLESigmaProof(CT memory ori, CT memory refresh, BN128.G1Point[2] memory p, uint pkx, uint pky, uint z, uint t, uint[] memory input) internal view returns(bool) {
     BN128.G1Point memory g1 = refresh.Y.add(ori.Y.neg());
     BN128.G1Point memory h1 = refresh.X.add(ori.X.neg());
     uint[12] memory points;
@@ -426,7 +432,7 @@ contract PGCVerifier {
         return dleSigmaVerifier.verifyDLESigmaProof(points, z);
     }
     if (t == 1) {
-        return dleSigmaVerifier.verifyDLESigmaProofWithNonce(points, z, nonce);
+        return dleSigmaVerifier.verifyDLESigmaProofWithCustom(points, z, input);
     }
   }
 

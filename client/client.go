@@ -121,6 +121,11 @@ const (
 	local         = "http://127.0.0.1:8545"
 )
 
+// GetClient returns ethclient, otherwise panic.
+func GetClient(url string) *ethclient.Client {
+	return getClient(url)
+}
+
 // GetRopstenInfura returns infura client on main net.
 func GetRopstenInfura() *ethclient.Client {
 	return getClient(ropstenInfura)
@@ -150,11 +155,9 @@ func getClient(url string) *ethclient.Client {
 	return client
 }
 
-// GetRopstenAccount returns default ropsten test account.
-func GetRopstenAccount() *bind.TransactOpts {
-	keyHex := "B38BB7EF4D69CCB1D5A1735887521BC1717AF203AE8BE7F8928E9ECC54FFD5E3"
-
-	key, err := crypto.HexToECDSA(keyHex)
+// GetAccountWithKey returns opts for sending tx.
+func GetAccountWithKey(keyhex string) *bind.TransactOpts {
+	key, err := crypto.HexToECDSA(keyhex)
 	if err != nil {
 		panic(err)
 	}
@@ -162,6 +165,13 @@ func GetRopstenAccount() *bind.TransactOpts {
 	return bind.NewKeyedTransactor(key)
 }
 
+// GetRopstenAccount returns default ropsten test account.
+func GetRopstenAccount() *bind.TransactOpts {
+	keyhex := "B38BB7EF4D69CCB1D5A1735887521BC1717AF203AE8BE7F8928E9ECC54FFD5E3"
+	return GetAccountWithKey(keyhex)
+}
+
+// GenerateAccount generates a new random account.
 func GenerateAccount() *bind.TransactOpts {
 	key, err := crypto.GenerateKey()
 	if err != nil {
