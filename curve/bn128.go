@@ -15,6 +15,7 @@ type Marshaler interface {
 }
 
 // BN128 implements elliptic.curve.
+// elliptic curve y²=x³+3
 type BN128 struct {
 }
 
@@ -35,8 +36,8 @@ func (bn128 *BN128) Params() *elliptic.CurveParams {
 	params.N = fromString("21888242871839275222246405745257275088548364400416034343698204186575808495617")
 	params.Gx = new(big.Int).SetUint64(1)
 	params.Gy = new(big.Int).SetUint64(2)
+	params.B = new(big.Int).SetUint64(3)
 	params.BitSize = 256
-	// todo: add other fields.
 
 	return params
 }

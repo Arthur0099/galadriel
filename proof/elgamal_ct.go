@@ -398,16 +398,24 @@ func getEncryptedMsg(sk *ecdsa.PrivateKey, ct *CTEncPoint) *utils.ECPoint {
 func decryptEncodedMsg(params CTParams, encodeMsg *utils.ECPoint) []byte {
 	bit := uint64(params.Bitsize())
 	upperLimit := new(big.Int).Exp(utils.Two, new(big.Int).SetUint64(bit), nil)
-	g := params.G()
+	g := params.G().Copy()
 
-	// todo: uint64 may not enough if bit size bigger than 64.
-	for i := new(big.Int).SetUint64(0); i.Cmp(upperLimit) == -1; {
-		point := new(utils.ECPoint).ScalarMult(g, i)
+	// encode zero.
+	if encodeMsg.X.Cmp(utils.Zero) == 0 && encodeMsg.Y.Cmp(utils.Zero) == 0 {
+		return []byte{}
+	}
+	if encodeMsg.Equal(g) {
+		return utils.One.Bytes()
+	}
+	// ethereum的crypto下的secpk的add传入的x1, y1; x2, y2为同样的点会报错(同样的指针)
+	point := new(utils.ECPoint).ScalarMult(g, utils.Two)
+	for i := new(big.Int).SetUint64(2); i.Cmp(upperLimit) == -1; {
 		if point.Equal(encodeMsg) {
 			return i.Bytes()
 		}
 
-		i = new(big.Int).Add(i, utils.One)
+		point.Add(point, g)
+		i.Add(i, utils.One)
 	}
 
 	return []byte{}

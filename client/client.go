@@ -118,7 +118,7 @@ func (c *Client) GetAccountWithETH() *bind.TransactOpts {
 
 const (
 	ropstenInfura = "https://ropsten.infura.io/v3/10d08c76bb104f6286f774ec21fa7ac9"
-	local         = "http://127.0.0.1:8545"
+	local         = "http://127.0.0.1:7545"
 )
 
 // GetClient returns ethclient, otherwise panic.
