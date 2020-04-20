@@ -102,7 +102,7 @@ contract PGCVerifier {
   }
 
   //
-  function verifyAggTransfer(uint[36] memory points, uint[10] memory scalar, uint[2*lrSize] memory l, uint [2*lrSize] memory r, uint[4] memory ub, uint nonce) public returns(bool) {
+  function verifyAggTransfer(uint[36] memory points, uint[10] memory scalar, uint[2*lrSize] memory l, uint [2*lrSize] memory r, uint[4] memory ub, uint nonce, uint token) public returns(bool) {
     CT memory userBalance;
     userBalance.X.X = ub[0];
     userBalance.X.Y = ub[1];
@@ -131,10 +131,11 @@ contract PGCVerifier {
     b.dleSigmaPoints[1] = BN128.G1Point(points[26], points[27]);
     // only this failed.
     // 4 mul, 4 add.
-    b.input = new uint[](11);
+    b.input = new uint[](12);
     b.input[0] = nonce;
+    b.input[1] = token;
     for (b.i = 0; b.i < 10; b.i++) {
-      b.input[b.i+1] = points[b.i];
+      b.input[b.i+2] = points[b.i];
     }
     require(verifyDLESigmaProof(b.tmpUpdatedBalance, b.refreshBalance, b.dleSigmaPoints, points[0], points[1], scalar[4], 1, b.input), "dle sigma proof failed");
 

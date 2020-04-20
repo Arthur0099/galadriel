@@ -45,7 +45,7 @@ func newRandomAggRangeParams(curve elliptic.Curve, bitsize, aggsize int) AggRang
 // DAggRangeProofParams returns default params for pgc/solidity system to genrate
 // verify all proofs.
 func DAggRangeProofParams() AggRangeParams {
-	return DAggRangeProofParamsWithBitsize(32)
+	return DAggRangeProofParams64()
 }
 
 const (
@@ -57,6 +57,16 @@ const (
 	// LRsize is the size of l, r
 	LRsize = N + step
 )
+
+// DAggRangeProofParams32 returns default 32 params
+func DAggRangeProofParams32() AggRangeParams {
+	return DAggRangeProofParamsWithBitsize(32)
+}
+
+// DAggRangeProofParams64 returns default 64 params
+func DAggRangeProofParams64() AggRangeParams {
+	return DAggRangeProofParamsWithBitsize(64)
+}
 
 // DAggRangeProofParamsWithBitsize return default params with bitsize.
 func DAggRangeProofParamsWithBitsize(bitsize int) AggRangeParams {

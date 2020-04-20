@@ -223,12 +223,16 @@ func generateDLESimaProof(g1, h1, g2, h2 *utils.ECPoint, w *big.Int, custom ...*
 	// A1 = g1 * a; A2 = g2 * a.
 	A1 := new(utils.ECPoint).ScalarMult(g1, a)
 	A2 := new(utils.ECPoint).ScalarMult(g2, a)
-	// compute challenge e.
-	data := []interface{}{A1.X, A1.Y, A2.X, A2.Y}
+	// compute challenge e prime.
+	eprime, _ := utils.ComputeChallenge(n, A1.X, A1.Y, A2.X, A2.Y)
+	cinput := make([]interface{}, 0)
 	for _, c := range custom {
-		data = append(data, c)
+		cinput = append(cinput, c)
 	}
-	e, err := utils.ComputeChallenge(n, data...)
+	// compute custom input hash.
+	hcustom, _ := utils.ComputeChallenge(n, cinput...)
+	// compute final challenge.
+	e, err := utils.ComputeChallenge(n, eprime, hcustom)
 	if err != nil {
 		return nil, err
 	}
@@ -264,12 +268,22 @@ func VerifyDLESigmaProof(params KeyParams, ori, refresh *CTEncPoint, pk *ecdsa.P
 
 func verifyDLESigmaProof(g1, h1, g2, h2 *utils.ECPoint, proof *DLESigmaProof, custom ...*big.Int) bool {
 	curve := proof.A1.Curve
+	n := curve.Params().N
 
 	data := []interface{}{proof.A1.X, proof.A1.Y, proof.A2.X, proof.A2.Y}
 	for _, c := range custom {
 		data = append(data, c)
 	}
-	e, err := utils.ComputeChallenge(curve.Params().N, data...)
+	// compute e prime challenge
+	eprime, _ := utils.ComputeChallenge(n, proof.A1.X, proof.A1.Y, proof.A2.X, proof.A2.Y)
+	cinput := make([]interface{}, 0)
+	for _, c := range custom {
+		cinput = append(cinput, c)
+	}
+	// compute custom input hash
+	hcustom, _ := utils.ComputeChallenge(n, cinput...)
+	// compute final challenge.
+	e, err := utils.ComputeChallenge(n, eprime, hcustom)
 	if err != nil {
 		return false
 	}

@@ -84,6 +84,7 @@ contract AggRangeProofVerifier {
     uint[vectorSize] tr;
   }
 
+  // 64位，该步骤会超出8000000限制
   constructor(address params_) public {
     // revert("test");
     params = PublicParams(params_);

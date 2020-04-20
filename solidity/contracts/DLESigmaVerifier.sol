@@ -11,32 +11,14 @@ contract DLESigmaVerifier {
   using BN128 for BN128.G1Point;
   using BN128 for *;
 
-  function verifyDLESigmaProofWithNonce(uint[12] memory points, uint z, uint nonce) public view returns(bool) {
-    uint e = computeChallenge3(points[0], points[1], points[2], points[3], nonce);
-    return verify(points, z, e);
-  }
-
   function verifyDLESigmaProofWithCustom(uint[12] memory points, uint z, uint[] memory input) public view returns(bool) {
-    uint[] memory ninput = new uint[](4+input.length);
+    uint[] memory ninput = new uint[](4);
     for (uint i = 0; i < 4; i++) {
       ninput[i] = points[i];
     }
-    for (uint i = 0; i < input.length; i++) {
-      ninput[i+4] = input[i];
-    }
-    uint e = computeCha(ninput);
-    return verify(points, z, e);
-  }
-
-  function verifyDLESigmaProofWithCustom2(uint[12] memory points, uint z, uint nonce, uint addr) public view returns(bool) {
-    uint[] memory input = new uint[](6);
-    input[0] = points[0];
-    input[1] = points[1];
-    input[2] = points[2];
-    input[3] = points[3];
-    input[4] = nonce;
-    input[5] = addr;
-    uint e = computeCha(input);
+    uint eprime = uint(keccak256(abi.encodePacked(ninput))).mod();
+    uint hinput = uint(keccak256(abi.encodePacked(input))).mod();
+    uint e = uint(keccak256(abi.encodePacked(eprime, hinput))).mod();
     return verify(points, z, e);
   }
 

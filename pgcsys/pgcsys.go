@@ -12,7 +12,7 @@ import (
 
 // ConfidentialTx is a tx for pgc transfer system(using aggreate bulletproof).
 type ConfidentialTx struct {
-	nonce *big.Int
+	nonce, token *big.Int
 	// in real system, this will be on chain and not inculded in ctx.
 	balance  *proof.CTEncPoint
 	pk1, pk2 *utils.ECPoint
@@ -103,11 +103,12 @@ func (tx *ConfidentialTx) ToSolidityInput() *solidityPGCInput {
 
 // CreateConfidentialTx creates confidential transaction to transfer assets from alice to bob.
 // alice和bob的值不要使用負數， 在進行加密時，會自動使用絕對值進行計算。
-func CreateConfidentialTx(params proof.AggRangeParams, alice *Account, bob *ecdsa.PublicKey, v *big.Int) (*ConfidentialTx, error) {
+func CreateConfidentialTx(params proof.AggRangeParams, alice *Account, bob *ecdsa.PublicKey, v, token *big.Int) (*ConfidentialTx, error) {
 	ctx := ConfidentialTx{}
 	alicePublicKey := &alice.sk.PublicKey
 
 	ctx.nonce = new(big.Int).SetUint64(alice.nonce)
+	ctx.token = new(big.Int).Set(token)
 	ctx.pk1 = new(utils.ECPoint).SetFromPublicKey(alicePublicKey)
 	ctx.pk2 = new(utils.ECPoint).SetFromPublicKey(bob)
 
@@ -131,6 +132,7 @@ func CreateConfidentialTx(params proof.AggRangeParams, alice *Account, bob *ecds
 	ctx.refreshBalance = refreshBalanceCT.CopyPublicPoint()
 	customs := make([]*big.Int, 0)
 	customs = append(customs, ctx.nonce)
+	customs = append(customs, token)
 	customs = append(customs, alicePublicKey.X)
 	customs = append(customs, alicePublicKey.Y)
 	customs = append(customs, bob.X)
@@ -178,6 +180,7 @@ func VerifyConfidentialTx(params proof.AggRangeParams, ctx *ConfidentialTx) bool
 
 	customs := make([]*big.Int, 0)
 	customs = append(customs, ctx.nonce)
+	customs = append(customs, ctx.token)
 	customs = append(customs, ctx.pk1.X)
 	customs = append(customs, ctx.pk1.Y)
 	customs = append(customs, ctx.pk2.X)

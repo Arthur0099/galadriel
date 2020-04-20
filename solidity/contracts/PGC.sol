@@ -254,7 +254,7 @@ contract PGC {
     // 2 add if no pending.
     (b.userBalance, b.localNonce) = getUserBalance(points[0], points[1], address(token));
     // check proof.
-    require(pgcVerifier.verifyAggTransfer(points, scalar, l, r, b.userBalance, b.localNonce), "transfer proofs invalid");
+    require(pgcVerifier.verifyAggTransfer(points, scalar, l, r, b.userBalance, b.localNonce, token), "transfer proofs invalid");
 
     // update sender's balance.
     // 4 add.

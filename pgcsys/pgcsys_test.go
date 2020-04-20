@@ -59,7 +59,8 @@ func testpgcctx(t *testing.T, params proof.AggRangeParams, senderAmount, receive
 	alice := CreateTestAccount(params, "alice", senderAmount)
 	bob := CreateTestAccount(params, "bob", receiver)
 
-	ctx, err := CreateConfidentialTx(params, alice, &bob.sk.PublicKey, amount)
+	token := big.NewInt(0)
+	ctx, err := CreateConfidentialTx(params, alice, &bob.sk.PublicKey, amount, token)
 	require.Nil(t, err, "generate condidential tx failed", err)
 
 	assert.Equal(t, expect, VerifyConfidentialTx(params, ctx), "confidential tx verify failed")
@@ -67,10 +68,11 @@ func testpgcctx(t *testing.T, params proof.AggRangeParams, senderAmount, receive
 
 func BenchmarkCreateConfidentialTxBN256(b *testing.B) {
 	params, alice, bob, amount := getTestConfig()
+	token := big.NewInt(0)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		if _, err := CreateConfidentialTx(params, alice, &bob.sk.PublicKey, amount); err != nil {
+		if _, err := CreateConfidentialTx(params, alice, &bob.sk.PublicKey, amount, token); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -79,7 +81,8 @@ func BenchmarkCreateConfidentialTxBN256(b *testing.B) {
 
 func BenchmarkVerifyConfidentialTxBN256(b *testing.B) {
 	params, alice, bob, amount := getTestConfig()
-	ctx, err := CreateConfidentialTx(params, alice, &bob.sk.PublicKey, amount)
+	token := big.NewInt(0)
+	ctx, err := CreateConfidentialTx(params, alice, &bob.sk.PublicKey, amount, token)
 	if err != nil {
 		b.Fatal(err)
 	}

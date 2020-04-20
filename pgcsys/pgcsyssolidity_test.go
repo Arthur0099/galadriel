@@ -91,7 +91,7 @@ func testPGCSystemContract(t *testing.T, tokenTest bool, auth *bind.TransactOpts
 	alice := initTestAccount(t, params, token, aliceAmount, name, auth, ethclient, pgc)
 
 	// bob.
-	bobAmount := new(big.Int).SetUint64(500)
+	bobAmount := new(big.Int).SetUint64(50)
 	name = "bob"
 	bob := initTestAccount(t, params, token, bobAmount, name, auth, ethclient, pgc)
 
@@ -158,7 +158,7 @@ func initTestAccount(t *testing.T, params proof.AggRangeParams, token common.Add
 }
 
 func aggTransfer(t *testing.T, params proof.AggRangeParams, from, to *Account, token common.Address, amount *big.Int, auth *bind.TransactOpts, ethclient *ethclient.Client, pgc *contracts.Pgc) {
-	ctx, err := CreateConfidentialTx(params, from, &to.sk.PublicKey, amount)
+	ctx, err := CreateConfidentialTx(params, from, &to.sk.PublicKey, amount, token.Hash().Big())
 	require.Nil(t, err, "generate condidential tx failed", err)
 	input := ctx.ToSolidityInput()
 

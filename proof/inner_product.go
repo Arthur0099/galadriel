@@ -113,6 +113,7 @@ func GenIPProof(params IPParams, p *utils.ECPoint, c *big.Int, a, b *utils.Field
 	//
 	gv := params.GV()
 	hv := params.HV()
+	// todo: only check in test if nessary.
 	gva := gv.Commit(a.GetVector())
 	hvb := hv.Commit(b.GetVector())
 	gvahvb := new(utils.ECPoint).Add(gva, hvb)
