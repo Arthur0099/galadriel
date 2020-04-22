@@ -80,6 +80,13 @@ func testPGCSystemContract(t *testing.T, tokenTest bool, auth *bind.TransactOpts
 	addrs, pgc := deployer.DeployPGCSystemAllContract(auth, ethclient)
 	params := proof.DAggRangeProofParamsWithBitsize(64)
 
+	if params.Bitsize() == 64 {
+		pubparams, _ := contracts.NewPublicparams(addrs[0], ethclient)
+		tt, _ := pubparams.Init(auth)
+		auth.Nonce.Add(auth.Nonce, utils.One)
+		log.Info("init tx", "hash", tt.Hash().Hex())
+	}
+
 	token := common.Address{}
 	if tokenTest {
 		token = setForToken(t, addrs, auth, ethclient)

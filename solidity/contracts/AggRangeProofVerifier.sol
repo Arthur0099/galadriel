@@ -1,4 +1,5 @@
 pragma solidity >= 0.5.0 < 0.6.0;
+pragma experimental ABIEncoderV2;
 
 import "./library/BN128.sol";
 import "./PublicParams.sol";
@@ -98,8 +99,9 @@ contract AggRangeProofVerifier {
     uint[2] memory tmpH = params.getH();
     uint[2] memory tmpU = params.getU();
     
-    uint[2*vectorSize] memory gv = params.getAggGVector();
-    uint[2*vectorSize] memory hv = params.getAggHVector();
+    // todo: 在该合约上初始化生成gv，hv，不从params上获取.
+    // uint[2*vectorSize] memory gv = params.getAggGVector();
+    // uint[2*vectorSize] memory hv = params.getAggHVector();
     g.X = tmpG[0];
     g.Y = tmpG[1];
     h.X = tmpH[0];
@@ -107,12 +109,12 @@ contract AggRangeProofVerifier {
     uBase.X = tmpU[0];
     uBase.Y = tmpU[1];
 
-    for (uint i = 0; i < vectorSize; i++) {
-      gvBase[i].X = gv[2*i];
-      gvBase[i].Y = gv[2*i+1];
-      hvBase[i].X = hv[2*i];
-      hvBase[i].Y = hv[2*i+1];
-    }
+    // for (uint i = 0; i < vectorSize; i++) {
+    //   gvBase[i].X = gv[2*i];
+    //   gvBase[i].Y = gv[2*i+1];
+    //   hvBase[i].X = hv[2*i];
+    //   hvBase[i].Y = hv[2*i+1];
+    // }
   }
 
   /*
@@ -158,8 +160,8 @@ contract AggRangeProofVerifier {
    * @dev 
    */
   function optimizedVerify(BN128.G1Point[2] memory v, RangeProof memory rangeProof) internal view returns(bool) {
-    BN128.G1Point[vectorSize] memory gv = getGV();
-    BN128.G1Point[vectorSize] memory hv = getHV();
+    BN128.G1Point[vectorSize] memory gv = params.getAggGV();
+    BN128.G1Point[vectorSize] memory hv = params.getAggHV();
     Board memory board;
     // compute
     board.y = computeChallenge(rangeProof.A.X, rangeProof.A.Y, rangeProof.S.X, rangeProof.S.Y);
