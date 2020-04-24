@@ -11,10 +11,13 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	log "github.com/inconshreveable/log15"
 	"github.com/pgc/client"
-	"github.com/pgc/contracts"
+	pgcm "github.com/pgc/contracts/pgc"
+	"github.com/pgc/contracts/tokenconverter"
+	"github.com/pgc/contracts/verifier"
 	"github.com/pgc/deployer"
 	"github.com/pgc/proof"
 	"github.com/pgc/utils"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -79,13 +82,7 @@ func TestPGCSystemContractTokenLocal(t *testing.T) {
 func testPGCSystemContract(t *testing.T, tokenTest bool, auth *bind.TransactOpts, ethclient *ethclient.Client) {
 	addrs, pgc := deployer.DeployPGCSystemAllContract(auth, ethclient)
 	params := proof.DAggRangeProofParamsWithBitsize(64)
-
-	if params.Bitsize() == 64 {
-		pubparams, _ := contracts.NewPublicparams(addrs[0], ethclient)
-		tt, _ := pubparams.Init(auth)
-		auth.Nonce.Add(auth.Nonce, utils.One)
-		log.Info("init tx", "hash", tt.Hash().Hex())
-	}
+	deployer.InitVector(auth, ethclient, addrs[2], 64)
 
 	token := common.Address{}
 	if tokenTest {
@@ -124,7 +121,7 @@ func setForToken(t *testing.T, addrs []common.Address, auth *bind.TransactOpts, 
 	require.Nil(t, err, "approve for token failed", err)
 	auth.Nonce.Add(auth.Nonce, utils.One)
 
-	tokenConverter, err := contracts.NewTokenconverter(addrs[5], ethclient)
+	tokenConverter, err := tokenconverter.NewTokenconverter(addrs[1], ethclient)
 	require.Nil(t, err, "get token converter failed", err)
 
 	_, err = tokenConverter.AddToken(auth, token, utils.One, "")
@@ -134,7 +131,7 @@ func setForToken(t *testing.T, addrs []common.Address, auth *bind.TransactOpts, 
 	return token
 }
 
-func initTestAccount(t *testing.T, params proof.AggRangeParams, token common.Address, amount *big.Int, name string, auth *bind.TransactOpts, ethclient *ethclient.Client, pgc *contracts.Pgc) *Account {
+func initTestAccount(t *testing.T, params proof.AggRangeParams, token common.Address, amount *big.Int, name string, auth *bind.TransactOpts, ethclient *ethclient.Client, pgc *pgcm.Pgc) *Account {
 	alice := CreateTestAccount(params, name, amount)
 	alicePK := [2]*big.Int{alice.sk.PublicKey.X, alice.sk.PublicKey.Y}
 
@@ -164,7 +161,7 @@ func initTestAccount(t *testing.T, params proof.AggRangeParams, token common.Add
 	return alice
 }
 
-func aggTransfer(t *testing.T, params proof.AggRangeParams, from, to *Account, token common.Address, amount *big.Int, auth *bind.TransactOpts, ethclient *ethclient.Client, pgc *contracts.Pgc) {
+func aggTransfer(t *testing.T, params proof.AggRangeParams, from, to *Account, token common.Address, amount *big.Int, auth *bind.TransactOpts, ethclient *ethclient.Client, pgc *pgcm.Pgc) {
 	ctx, err := CreateConfidentialTx(params, from, &to.sk.PublicKey, amount, token.Hash().Big())
 	require.Nil(t, err, "generate condidential tx failed", err)
 	input := ctx.ToSolidityInput()
@@ -197,7 +194,7 @@ func aggTransfer(t *testing.T, params proof.AggRangeParams, from, to *Account, t
 	log.Info("agg transfer", "token", token.Hash().Hex(), "amount", amount, "gas", receipt.GasUsed)
 }
 
-func burn(t *testing.T, params proof.AggRangeParams, from *Account, receiver, token common.Address, auth *bind.TransactOpts, ethclient *ethclient.Client, pgc *contracts.Pgc) {
+func burn(t *testing.T, params proof.AggRangeParams, from *Account, receiver, token common.Address, auth *bind.TransactOpts, ethclient *ethclient.Client, pgc *pgcm.Pgc) {
 	tx, err := CreateBurnETHTx(params, from, receiver, token)
 	require.Nil(t, err, "generate burn eth tx failed")
 
@@ -224,4 +221,107 @@ func burn(t *testing.T, params proof.AggRangeParams, from *Account, receiver, to
 
 func isToken(token common.Address) bool {
 	return token.Hash().Big().Cmp(utils.Zero) == 0
+}
+
+func TestAggTransferByV2Local(t *testing.T) {
+	amount := big.NewInt(25)
+	params := proof.DAggRangeProofParamsWithBitsize(64)
+	from := CreateTestAccount(params, "alice", big.NewInt(100))
+	to := CreateTestAccount(params, "bob", big.NewInt(100))
+
+	rpcclient := client.GetLocalRPC()
+	ethclient := client.GetLocal()
+	auth := rpcclient.GetAccountWithETH()
+
+	paramsAddr, _ := deployer.DeployParams(auth, ethclient)
+	addr, _, con, _ := verifier.DeployVerifier(auth, ethclient, paramsAddr)
+	deployer.InitVector(auth, ethclient, addr, 64)
+
+	testAggTransferByV2(t, true, amount, params, from, to, con)
+}
+
+func testAggTransferByV2(t *testing.T, expect bool, amount *big.Int, params proof.AggRangeParams, from, to *Account, con *verifier.Verifier) {
+	ctx, err := CreateConfidentialTx(params, from, &to.sk.PublicKey, amount, big.NewInt(0))
+	require.Nil(t, err, "generate condidential tx failed", err)
+
+	proof, state := ToSolidityV2(ctx)
+
+	actual, err := con.VerifyAggTransfer(utils.CallOpt(), proof, state)
+	require.Nil(t, err, "call agg range verifier failed", err)
+	assert.Equal(t, expect, actual)
+}
+
+// ToSolidityV2 format data to solidity input v2.
+func ToSolidityV2(ctx *ConfidentialTx) (verifier.VerifierTransferProof, verifier.VerifierTransferStatement) {
+	proof := verifier.VerifierTransferProof{}
+	state := verifier.VerifierTransferStatement{}
+
+	// set proof.
+	proof.PteProof = verifier.VerifierPTEProof{}
+	proof.PteProof.A1 = toSolidityPoint(ctx.sigmaPTEqualityProof.A1)
+	proof.PteProof.A2 = toSolidityPoint(ctx.sigmaPTEqualityProof.A2)
+	proof.PteProof.B = toSolidityPoint(ctx.sigmaPTEqualityProof.B)
+	proof.PteProof.Z1 = ctx.sigmaPTEqualityProof.Z1
+	proof.PteProof.Z2 = ctx.sigmaPTEqualityProof.Z2
+
+	proof.DleProof = verifier.VerifierDLEProof{}
+	proof.DleProof.A1 = toSolidityPoint(ctx.sigmaDlogeqProof.A1)
+	proof.DleProof.A2 = toSolidityPoint(ctx.sigmaDlogeqProof.A2)
+	proof.DleProof.Z = ctx.sigmaDlogeqProof.Z
+
+	proof.CtvProof = verifier.VerifierCTVProof{}
+	proof.CtvProof.A = toSolidityPoint(ctx.sigmaCTValidProof.A)
+	proof.CtvProof.B = toSolidityPoint(ctx.sigmaCTValidProof.B)
+	proof.CtvProof.Z1 = ctx.sigmaCTValidProof.Z1
+	proof.CtvProof.Z2 = ctx.sigmaCTValidProof.Z2
+
+	proof.AggProof = verifier.VerifierAggProof{}
+	proof.AggProof.A = toSolidityPoint(ctx.bulletProof.A)
+	proof.AggProof.S = toSolidityPoint(ctx.bulletProof.S)
+	proof.AggProof.T1 = toSolidityPoint(ctx.bulletProof.T1)
+	proof.AggProof.T2 = toSolidityPoint(ctx.bulletProof.T2)
+	proof.AggProof.T = ctx.bulletProof.T()
+	proof.AggProof.Txx = ctx.bulletProof.TX()
+	proof.AggProof.U = ctx.bulletProof.U()
+	proof.AggProof.Ap = ctx.bulletProof.AIP()
+	proof.AggProof.Bp = ctx.bulletProof.BIP()
+	proof.AggProof.L = toSolidityPoints(ctx.bulletProof.L())
+	proof.AggProof.R = toSolidityPoints(ctx.bulletProof.R())
+
+	// set state.
+	state.Pk1 = toSolidityPoint(ctx.pk1)
+	state.Pk2 = toSolidityPoint(ctx.pk2)
+	state.Refresh = verifier.VerifierCT{
+		X: toSolidityPoint(ctx.refreshBalance.X),
+		Y: toSolidityPoint(ctx.refreshBalance.Y),
+	}
+	state.Updated = verifier.VerifierCT{
+		X: toSolidityPoint(ctx.updatedBalance.X),
+		Y: toSolidityPoint(ctx.updatedBalance.Y),
+	}
+	state.Mrct = verifier.VerifierMRCT{
+		X1: toSolidityPoint(ctx.transfer.X1),
+		X2: toSolidityPoint(ctx.transfer.X2),
+		Y:  toSolidityPoint(ctx.transfer.Y),
+	}
+	state.Custom = ctx.Custom()
+
+	return proof, state
+}
+
+func toSolidityPoints(ps []*utils.ECPoint) []verifier.BN128G1Point {
+	nps := make([]verifier.BN128G1Point, 0)
+	for _, p := range ps {
+		nps = append(nps, toSolidityPoint(p))
+	}
+
+	return nps
+}
+
+func toSolidityPoint(p *utils.ECPoint) verifier.BN128G1Point {
+	np := verifier.BN128G1Point{}
+	np.X = new(big.Int).Set(p.X)
+	np.Y = new(big.Int).Set(p.Y)
+
+	return np
 }

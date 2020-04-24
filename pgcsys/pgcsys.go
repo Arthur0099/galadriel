@@ -18,10 +18,13 @@ type ConfidentialTx struct {
 	pk1, pk2 *utils.ECPoint
 	transfer *proof.MRTwistedELGamalCTPub
 
+	refreshBalance *proof.CTEncPoint
+	// only used for test, should be calculated in solidity.
+	updatedBalance *proof.CTEncPoint
+
 	// proof
 	sigmaPTEqualityProof *proof.PTEqualityProof
 	bulletProof          *proof.AggRangeProof
-	refreshBalance       *proof.CTEncPoint
 	sigmaCTValidProof    *proof.CTValidProof
 	sigmaDlogeqProof     *proof.DLESigmaProof
 }
@@ -101,6 +104,25 @@ func (tx *ConfidentialTx) ToSolidityInput() *solidityPGCInput {
 	return &input
 }
 
+// Custom returns custom field added to generate challenge point.
+func (tx *ConfidentialTx) Custom() []*big.Int {
+	customs := make([]*big.Int, 0)
+	customs = append(customs, tx.nonce)
+	customs = append(customs, tx.token)
+	customs = append(customs, tx.pk1.X)
+	customs = append(customs, tx.pk1.Y)
+	customs = append(customs, tx.pk2.X)
+	customs = append(customs, tx.pk2.Y)
+	customs = append(customs, tx.transfer.X1.X)
+	customs = append(customs, tx.transfer.X1.Y)
+	customs = append(customs, tx.transfer.X2.X)
+	customs = append(customs, tx.transfer.X2.Y)
+	customs = append(customs, tx.transfer.Y.X)
+	customs = append(customs, tx.transfer.Y.Y)
+
+	return customs
+}
+
 // CreateConfidentialTx creates confidential transaction to transfer assets from alice to bob.
 // alice和bob的值不要使用負數， 在進行加密時，會自動使用絕對值進行計算。
 func CreateConfidentialTx(params proof.AggRangeParams, alice *Account, bob *ecdsa.PublicKey, v, token *big.Int) (*ConfidentialTx, error) {
@@ -123,6 +145,7 @@ func CreateConfidentialTx(params proof.AggRangeParams, alice *Account, bob *ecds
 	}
 	ctx.balance = alice.balance
 	updateBalanceCT := new(proof.CTEncPoint).Sub(ctx.balance, ctx.transfer.First())
+	ctx.updatedBalance = updateBalanceCT.Copy()
 	refreshBalanceCT, err := proof.Refresh(params, alice.sk, updateBalanceCT)
 	// for speed up.
 	refreshBalanceCT.EncMsg = new(big.Int).Sub(alice.m, v).Bytes()
@@ -130,19 +153,7 @@ func CreateConfidentialTx(params proof.AggRangeParams, alice *Account, bob *ecds
 		return nil, err
 	}
 	ctx.refreshBalance = refreshBalanceCT.CopyPublicPoint()
-	customs := make([]*big.Int, 0)
-	customs = append(customs, ctx.nonce)
-	customs = append(customs, token)
-	customs = append(customs, alicePublicKey.X)
-	customs = append(customs, alicePublicKey.Y)
-	customs = append(customs, bob.X)
-	customs = append(customs, bob.Y)
-	customs = append(customs, ctx.transfer.X1.X)
-	customs = append(customs, ctx.transfer.X1.Y)
-	customs = append(customs, ctx.transfer.X2.X)
-	customs = append(customs, ctx.transfer.X2.Y)
-	customs = append(customs, ctx.transfer.Y.X)
-	customs = append(customs, ctx.transfer.Y.Y)
+	customs := ctx.Custom()
 	ctx.sigmaDlogeqProof, err = proof.GenerateDLESigmaProof(params, updateBalanceCT, ctx.refreshBalance,
 		alice.sk, customs...)
 	if err != nil {
@@ -178,19 +189,7 @@ func VerifyConfidentialTx(params proof.AggRangeParams, ctx *ConfidentialTx) bool
 
 	updatedBalance := new(proof.CTEncPoint).Sub(ctx.balance, ctx.transfer.First())
 
-	customs := make([]*big.Int, 0)
-	customs = append(customs, ctx.nonce)
-	customs = append(customs, ctx.token)
-	customs = append(customs, ctx.pk1.X)
-	customs = append(customs, ctx.pk1.Y)
-	customs = append(customs, ctx.pk2.X)
-	customs = append(customs, ctx.pk2.Y)
-	customs = append(customs, ctx.transfer.X1.X)
-	customs = append(customs, ctx.transfer.X1.Y)
-	customs = append(customs, ctx.transfer.X2.X)
-	customs = append(customs, ctx.transfer.X2.Y)
-	customs = append(customs, ctx.transfer.Y.X)
-	customs = append(customs, ctx.transfer.Y.Y)
+	customs := ctx.Custom()
 	if !proof.VerifyDLESigmaProof(params, updatedBalance, ctx.refreshBalance, ctx.pk1.ToPublicKey(), ctx.sigmaDlogeqProof, customs...) {
 		log.Warn("verify dle sigma proof failed")
 		return false

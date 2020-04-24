@@ -1,4 +1,5 @@
 pragma solidity >= 0.5.0 < 0.6.0;
+pragma experimental ABIEncoderV2;
 
 import "./library/BN128.sol";
 
@@ -33,10 +34,6 @@ contract IPVerifier {
     BN128.G1Point np;
 
     IPProof proof;
-  }
-
-  // todo: remove
-  constructor(address params) public {
   }
 
 
@@ -209,7 +206,7 @@ contract IPVerifier {
   function smallParseBinary(uint t, uint j, uint size) internal pure returns(bool) {
     uint w = 1 << (size - 1);
 
-    for (uint i=0; i < j; i++) {
+    for (uint i = 0; i < j; i++) {
       w = w >> 1;
     }
 

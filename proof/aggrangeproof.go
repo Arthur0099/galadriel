@@ -174,9 +174,19 @@ func (aggp *AggRangeProof) Li(i int) *utils.ECPoint {
 	return aggp.ipProof.l[i]
 }
 
+// L .
+func (aggp *AggRangeProof) L() []*utils.ECPoint {
+	return aggp.ipProof.l
+}
+
 // Ri .
 func (aggp *AggRangeProof) Ri(i int) *utils.ECPoint {
 	return aggp.ipProof.r[i]
+}
+
+// R .
+func (aggp *AggRangeProof) R() []*utils.ECPoint {
+	return aggp.ipProof.r
 }
 
 // AIP .

@@ -3,6 +3,7 @@ package pgc
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -24,9 +25,6 @@ const (
 
 var contractsName = []map[string]string{
 	{
-		"name": "DLESigmaVerifier",
-	},
-	{
 		"name": "PublicParams",
 	},
 	{
@@ -39,19 +37,13 @@ var contractsName = []map[string]string{
 		"name": "RangeProofVerifier",
 	},
 	{
-		"name": "AggRangeProofVerifier",
-	},
-	{
-		"name": "SigmaVerifier",
-	},
-	{
 		"name": "Token",
 	},
 	{
 		"name": "TokenConverter",
 	},
 	{
-		"name": "PGCVerifier",
+		"name": "Verifier",
 	},
 }
 
@@ -69,6 +61,9 @@ func GenerateGoCode(newFlag bool) {
 // GenerateJavaCode automatically generates java code to call/send contract tx.
 func GenerateJavaCode(flag bool) {
 	for _, v := range contractsName {
+		if v["name"] != "PGC" {
+			continue
+		}
 		path := filepath.Join(ContractsPath, v["name"]+".json")
 		files := generateJavaCode(path, v["name"])
 		if flag {
@@ -101,17 +96,21 @@ func generateGoCode(path, name string, newFlag bool) []string {
 	abiName := name + ".abi"
 	binName := name + ".bin"
 	var outName string
+	var dir string
 	if newFlag {
 		outName = filepath.Join("./", "new", name, name+".go")
 	} else {
-		outName = filepath.Join("./contracts", name+".go")
+		dir = filepath.Join("./contracts", name)
+		outName = filepath.Join("./contracts", name, name+".go")
 	}
+
+	os.MkdirAll(dir, 0755)
 
 	utils.Write(abiName, abiRaw)
 	utils.Write(binName, trimBin)
 
 	cmd := "./abigen"
-	command := exec.Command(cmd, "--bin", binName, "--abi", abiName, "--pkg", "contracts", "--out", outName, "--type", name)
+	command := exec.Command(cmd, "--bin", binName, "--abi", abiName, "--pkg", name, "--out", outName, "--type", name)
 	fmt.Print(outName, "\n")
 	err = command.Run()
 	if err != nil {

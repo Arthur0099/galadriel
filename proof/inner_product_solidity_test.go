@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pgc/client"
-	"github.com/pgc/contracts"
+	"github.com/pgc/contracts/ipverifier"
 	"github.com/pgc/curve"
 	"github.com/pgc/deployer"
 
@@ -22,8 +22,7 @@ func TestInnerProductContractVerify(t *testing.T) {
 	rpcclient := client.GetLocalRPC()
 	ethclient := client.GetLocal()
 	auth := rpcclient.GetAccountWithETH()
-	paramsAddr, _ := deployer.DeployParams(auth, ethclient)
-	_, ipcon := deployer.DeployInnerProduct(auth, ethclient, paramsAddr)
+	_, ipcon := deployer.DeployInnerProduct(auth, ethclient)
 
 	cases := []int{2, 4, 8, 16, 32, 64}
 	for _, c := range cases {
@@ -31,7 +30,7 @@ func TestInnerProductContractVerify(t *testing.T) {
 	}
 }
 
-func testInnerProductContractVerify(t *testing.T, cv elliptic.Curve, bitsize int, ipcon *contracts.Ipverifier) {
+func testInnerProductContractVerify(t *testing.T, cv elliptic.Curve, bitsize int, ipcon *ipverifier.Ipverifier) {
 	ipparams := newRandomParams(cv, bitsize)
 	p, c, a, b := newRandomcommitments(ipparams, cv.Params().N, bitsize)
 

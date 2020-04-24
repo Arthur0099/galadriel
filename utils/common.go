@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/pgc/contracts"
+	pgcm "github.com/pgc/contracts/pgc"
 )
 
 var (
@@ -300,5 +300,5 @@ func CallOpt() *bind.CallOpts {
 }
 
 func init() {
-	parsed, _ = abi.JSON(strings.NewReader(contracts.PgcABI))
+	parsed, _ = abi.JSON(strings.NewReader(pgcm.PgcABI))
 }

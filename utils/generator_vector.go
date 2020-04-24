@@ -191,6 +191,11 @@ func (gv *GeneratorVector) Hadamard(exponent []*big.Int) *GeneratorVector {
 	return NewGeneratorVector(newVector)
 }
 
+// GetVector returns underlying ec point.
+func (gv *GeneratorVector) GetVector() []*ECPoint {
+	return gv.vector
+}
+
 // Get returns point by index.
 func (gv *GeneratorVector) Get(i int) *ECPoint {
 	return gv.vector[i]

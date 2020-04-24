@@ -1,8 +1,17 @@
 package deployer
 
 import (
+	"math/big"
+
+	log "github.com/inconshreveable/log15"
 	"github.com/pgc/client"
-	"github.com/pgc/contracts"
+	"github.com/pgc/contracts/ipverifier"
+	pgcm "github.com/pgc/contracts/pgc"
+	"github.com/pgc/contracts/publicparams"
+	"github.com/pgc/contracts/rangeproofverifier"
+	"github.com/pgc/contracts/token"
+	"github.com/pgc/contracts/tokenconverter"
+	"github.com/pgc/contracts/verifier"
 	"github.com/pgc/utils"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -11,15 +20,16 @@ import (
 )
 
 // DeployParams deploy param contract.
-func DeployParams(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.Address, *contracts.Publicparams) {
+func DeployParams(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.Address, *publicparams.Publicparams) {
 	if err := client.SetNonce(auth, ethclient); err != nil {
 		panic(err)
 	}
 
-	addr, tx, con, err := contracts.DeployPublicparams(auth, ethclient)
+	addr, tx, con, err := publicparams.DeployPublicparams(auth, ethclient)
 	if err != nil {
 		panic(err)
 	}
+	log.Info("send deploy params tx success", "tx", tx.Hash().Hex())
 	auth.Nonce.Add(auth.Nonce, utils.One)
 	client.WaitForTx(ethclient, tx.Hash())
 
@@ -27,31 +37,16 @@ func DeployParams(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.
 }
 
 // DeployInnerProduct deploys inner product contract.
-func DeployInnerProduct(auth *bind.TransactOpts, ethclient *ethclient.Client, params common.Address) (common.Address, *contracts.Ipverifier) {
+func DeployInnerProduct(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.Address, *ipverifier.Ipverifier) {
 	if err := client.SetNonce(auth, ethclient); err != nil {
 		panic(err)
 	}
 
-	addr, tx, con, err := contracts.DeployIpverifier(auth, ethclient, params)
+	addr, tx, con, err := ipverifier.DeployIpverifier(auth, ethclient)
 	if err != nil {
 		panic(err)
 	}
-	auth.Nonce.Add(auth.Nonce, utils.One)
-	client.WaitForTx(ethclient, tx.Hash())
-
-	return addr, con
-}
-
-// DeployAggRangeProof deploys aggrate range proof verifier.
-func DeployAggRangeProof(auth *bind.TransactOpts, ethclient *ethclient.Client, params common.Address) (common.Address, *contracts.Aggrangeproofverifier) {
-	if err := client.SetNonce(auth, ethclient); err != nil {
-		panic(err)
-	}
-
-	addr, tx, con, err := contracts.DeployAggrangeproofverifier(auth, ethclient, params)
-	if err != nil {
-		panic(err)
-	}
+	log.Info("send deploy inner product tx success", "tx", tx.Hash().Hex())
 	auth.Nonce.Add(auth.Nonce, utils.One)
 	client.WaitForTx(ethclient, tx.Hash())
 
@@ -59,15 +54,16 @@ func DeployAggRangeProof(auth *bind.TransactOpts, ethclient *ethclient.Client, p
 }
 
 // DeployRangeproofverifier deploys single range proof verifier.
-func DeployRangeproofverifier(auth *bind.TransactOpts, ethclient *ethclient.Client, params, inner common.Address) (common.Address, *contracts.Rangeproofverifier) {
+func DeployRangeproofverifier(auth *bind.TransactOpts, ethclient *ethclient.Client, inner common.Address) (common.Address, *rangeproofverifier.Rangeproofverifier) {
 	if err := client.SetNonce(auth, ethclient); err != nil {
 		panic(err)
 	}
 
-	addr, tx, con, err := contracts.DeployRangeproofverifier(auth, ethclient, params, inner)
+	addr, tx, con, err := rangeproofverifier.DeployRangeproofverifier(auth, ethclient, inner)
 	if err != nil {
 		panic(err)
 	}
+	log.Info("send deploy range proof tx success", "tx", tx.Hash().Hex())
 	auth.Nonce.Add(auth.Nonce, utils.One)
 	client.WaitForTx(ethclient, tx.Hash())
 
@@ -75,15 +71,16 @@ func DeployRangeproofverifier(auth *bind.TransactOpts, ethclient *ethclient.Clie
 }
 
 // DeployToken deploys a erc-20 token contract.
-func DeployToken(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.Address, *contracts.Token) {
+func DeployToken(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.Address, *token.Token) {
 	if err := client.SetNonce(auth, ethclient); err != nil {
 		panic(err)
 	}
 
-	addr, tx, con, err := contracts.DeployToken(auth, ethclient)
+	addr, tx, con, err := token.DeployToken(auth, ethclient)
 	if err != nil {
 		panic(err)
 	}
+	log.Info("send deploy token tx success", "tx", tx.Hash().Hex())
 	auth.Nonce.Add(auth.Nonce, utils.One)
 	client.WaitForTx(ethclient, tx.Hash())
 
@@ -91,65 +88,33 @@ func DeployToken(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.A
 }
 
 // DeployTokenConverter deploys contract to convert token.
-func DeployTokenConverter(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.Address, *contracts.Tokenconverter) {
+func DeployTokenConverter(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.Address, *tokenconverter.Tokenconverter) {
 	if err := client.SetNonce(auth, ethclient); err != nil {
 		panic(err)
 	}
 
-	addr, tx, con, err := contracts.DeployTokenconverter(auth, ethclient)
+	addr, tx, con, err := tokenconverter.DeployTokenconverter(auth, ethclient)
 	if err != nil {
 		panic(err)
 	}
+	log.Info("send deploy token converter tx success", "tx", tx.Hash().Hex())
 	auth.Nonce.Add(auth.Nonce, utils.One)
 	client.WaitForTx(ethclient, tx.Hash())
 
 	return addr, con
 }
 
-// DeployDleSigma deploys dle sigma contract.
-func DeployDleSigma(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.Address, *contracts.Dlesigmaverifier) {
+// DeployVerifier deploys pgc proof verifier contract.
+func DeployVerifier(auth *bind.TransactOpts, ethclient *ethclient.Client, params common.Address) (common.Address, *verifier.Verifier) {
 	if err := client.SetNonce(auth, ethclient); err != nil {
 		panic(err)
 	}
 
-	addr, tx, con, err := contracts.DeployDlesigmaverifier(auth, ethclient)
+	addr, tx, con, err := verifier.DeployVerifier(auth, ethclient, params)
 	if err != nil {
 		panic(err)
 	}
-	auth.Nonce.Add(auth.Nonce, utils.One)
-	client.WaitForTx(ethclient, tx.Hash())
-
-	return addr, con
-}
-
-// DeploySigma deploys sigma contract.
-func DeploySigma(auth *bind.TransactOpts, ethclient *ethclient.Client, params common.Address) (common.Address, *contracts.Sigmaverifier) {
-	if err := client.SetNonce(auth, ethclient); err != nil {
-		panic(err)
-	}
-
-	addr, tx, con, err := contracts.DeploySigmaverifier(auth, ethclient, params)
-	if err != nil {
-		panic(err)
-	}
-	auth.Nonce.Add(auth.Nonce, utils.One)
-	client.WaitForTx(ethclient, tx.Hash())
-
-	return addr, con
-}
-
-// DeployPGCVerifier deploys pgc system verifier for verifing proofs.
-func DeployPGCVerifier(auth *bind.TransactOpts, ethclient *ethclient.Client,
-	params, dleSigma, rangeProof, aggRangeProof, sigma common.Address) (common.Address, *contracts.Pgcverifier) {
-
-	if err := client.SetNonce(auth, ethclient); err != nil {
-		panic(err)
-	}
-
-	addr, tx, con, err := contracts.DeployPgcverifier(auth, ethclient, params, dleSigma, rangeProof, aggRangeProof, sigma)
-	if err != nil {
-		panic(err)
-	}
+	log.Info("send deploy verifier tx success", "tx", tx.Hash().Hex())
 	auth.Nonce.Add(auth.Nonce, utils.One)
 	client.WaitForTx(ethclient, tx.Hash())
 
@@ -157,15 +122,16 @@ func DeployPGCVerifier(auth *bind.TransactOpts, ethclient *ethclient.Client,
 }
 
 // DeployPGCMain deploys pgc system main contract.
-func DeployPGCMain(auth *bind.TransactOpts, ethclient *ethclient.Client, params, pgcVerifier, tokenConverter common.Address) (common.Address, *contracts.Pgc) {
+func DeployPGCMain(auth *bind.TransactOpts, ethclient *ethclient.Client, params, pgcVerifier, tokenConverter common.Address) (common.Address, *pgcm.Pgc) {
 	if err := client.SetNonce(auth, ethclient); err != nil {
 		panic(err)
 	}
 
-	addr, tx, con, err := contracts.DeployPgc(auth, ethclient, params, pgcVerifier, tokenConverter)
+	addr, tx, con, err := pgcm.DeployPgc(auth, ethclient, params, pgcVerifier, tokenConverter)
 	if err != nil {
 		panic(err)
 	}
+	log.Info("send deploy pgc main tx success", "tx", tx.Hash().Hex())
 	auth.Nonce.Add(auth.Nonce, utils.One)
 	client.WaitForTx(ethclient, tx.Hash())
 
@@ -173,35 +139,47 @@ func DeployPGCMain(auth *bind.TransactOpts, ethclient *ethclient.Client, params,
 }
 
 // DeployPGCSystemAllContract deploys all contract for pgc system.
-func DeployPGCSystemAllContract(auth *bind.TransactOpts, ethclient *ethclient.Client) ([]common.Address, *contracts.Pgc) {
+func DeployPGCSystemAllContract(auth *bind.TransactOpts, ethclient *ethclient.Client) ([]common.Address, *pgcm.Pgc) {
 	addrs := make([]common.Address, 0)
 
 	params, _ := DeployParams(auth, ethclient)
 	addrs = append(addrs, params)
 
-	sigma, _ := DeploySigma(auth, ethclient, params)
-	addrs = append(addrs, sigma)
-
-	dleSigma, _ := DeployDleSigma(auth, ethclient)
-	addrs = append(addrs, dleSigma)
-
-	ip, _ := DeployInnerProduct(auth, ethclient, params)
-	addrs = append(addrs, ip)
-
-	rangeProof, _ := DeployRangeproofverifier(auth, ethclient, params, ip)
-	addrs = append(addrs, rangeProof)
-
 	tokenConverter, _ := DeployTokenConverter(auth, ethclient)
 	addrs = append(addrs, tokenConverter)
 
-	aggRange, _ := DeployAggRangeProof(auth, ethclient, params)
-	addrs = append(addrs, aggRange)
+	verifierAddr, _ := DeployVerifier(auth, ethclient, params)
+	addrs = append(addrs, verifierAddr)
 
-	pgcVerifier, _ := DeployPGCVerifier(auth, ethclient, params, dleSigma, rangeProof, aggRange, sigma)
-	addrs = append(addrs, pgcVerifier)
-
-	pgcMain, pgc := DeployPGCMain(auth, ethclient, params, pgcVerifier, tokenConverter)
+	pgcMain, pgc := DeployPGCMain(auth, ethclient, params, verifierAddr, tokenConverter)
 	addrs = append(addrs, pgcMain)
 
 	return addrs, pgc
+}
+
+// InitVector init g/h generate vector for agg range proof.
+func InitVector(auth *bind.TransactOpts, ethclient *ethclient.Client, addr common.Address, bitsize int) {
+	vectorsize := bitsize * 2
+	initStep := 32
+	step := 45
+	if vectorsize <= initStep {
+		return
+	}
+	vectorsize -= initStep
+	vr, err := verifier.NewVerifier(addr, ethclient)
+	if err != nil {
+		panic(err)
+	}
+
+	for vectorsize > 0 {
+		tx, err := vr.Init(auth, big.NewInt(int64(step)))
+		if err != nil {
+			panic(err)
+		}
+		log.Info("send init verifier tx success", "tx", tx.Hash().Hex())
+		client.WaitForTx(ethclient, tx.Hash())
+		auth.Nonce.Add(auth.Nonce, utils.One)
+		vectorsize -= step
+	}
+
 }
