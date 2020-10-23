@@ -1,6 +1,8 @@
 package pgcsys
 
 import (
+	"crypto/elliptic"
+	"fmt"
 	"math/big"
 	"os"
 	"testing"
@@ -89,25 +91,76 @@ func testPGCSystemContract(t *testing.T, tokenTest bool, auth *bind.TransactOpts
 		token = setForToken(t, addrs, auth, ethclient)
 	}
 
+	// cross pipe fine enable caution drift pioneer garden report volcano slight portion
+
+	fmt.Scanln()
+
+	authAlice := client.GetAccountWithKey("92549442deda12f9b6643cb5cace7f13c62adb6ca30a7505c48fdae9f14fe16c")
+	client.SetNonce(authAlice, ethclient)
+	authBob := client.GetAccountWithKey("ea7036d37d80ae16bae54ceb1cd38ec8288df631771e898890bb2aac8ed42f61")
+	client.SetNonce(authBob, ethclient)
+
 	// alice
-	aliceAmount := new(big.Int).SetUint64(500)
-	name := "alice"
-	alice := initTestAccount(t, params, token, aliceAmount, name, auth, ethclient, pgc)
+	aliceAmount := new(big.Int).SetUint64(512)
+	name := "Alice"
+	alice := CreateTestAccount(params, name, aliceAmount)
+	fmt.Println("")
+	fmt.Println("New pgc account created")
+	fmt.Println("Account name:", name)
+	fmt.Printf("Account pubkey: %x\n", elliptic.Marshal(alice.sk.Curve, alice.sk.X, alice.sk.Y))
 
 	// bob.
-	bobAmount := new(big.Int).SetUint64(50)
-	name = "bob"
-	bob := initTestAccount(t, params, token, bobAmount, name, auth, ethclient, pgc)
+	bobAmount := new(big.Int).SetUint64(256)
+	name = "Bob"
+	bob := CreateTestAccount(params, name, bobAmount)
+	fmt.Println("")
+	fmt.Println("New pgc account created")
+	fmt.Println("Account name:", name)
+	fmt.Printf("Account pubkey: %x\n", elliptic.Marshal(bob.sk.Curve, bob.sk.X, bob.sk.Y))
+	fmt.Println("")
 
-	transferAmount := new(big.Int).SetUint64(100)
-	auth.GasLimit = 100000000
-	aggTransfer(t, params, alice, bob, token, transferAmount, auth, ethclient, pgc)
-	transferAmount = new(big.Int).SetUint64(50)
-	aggTransfer(t, params, alice, bob, token, transferAmount, auth, ethclient, pgc)
-	aggTransfer(t, params, alice, bob, token, transferAmount, auth, ethclient, pgc)
+	fmt.Scanln()
+	initTestAccount(t, alice, params, token, aliceAmount, name, authAlice, ethclient, pgc)
+	initTestAccount(t, bob, params, token, bobAmount, name, authBob, ethclient, pgc)
 
-	receiver := auth.From
+	fmt.Println("")
+	fmt.Println("Deposit succeeds")
+	fmt.Println("Alice's current balance", alice.m)
+	fmt.Println("Bob's current balance", bob.m)
+	fmt.Scanln()
+
+	transferAmount := new(big.Int).SetUint64(128)
+	auth.GasLimit = 8000000
+	ctx := aggTransfer(t, params, alice, bob, token, transferAmount, auth, ethclient, pgc)
+
+	fmt.Println("")
+	fmt.Println("CTx transfer succeeds")
+	fmt.Println("Alice's current balance", alice.m)
+	fmt.Println("Bob's current balance", bob.m)
+	fmt.Scanln()
+
+	// 审计
+	fmt.Println("")
+	fmt.Println("Audit Begins")
+	fmt.Println("Alice says that the amount in this CTx is 128, And she generates a proof for this CTx")
+	encryptedTransfer := ctx.transfer.First().Copy()
+	xx := elliptic.Marshal(bob.sk.Curve, encryptedTransfer.X.X, encryptedTransfer.X.Y)
+	yy := elliptic.Marshal(bob.sk.Curve, encryptedTransfer.Y.X, encryptedTransfer.Y.Y)
+	fmt.Printf("The encrypted amount in the transfer is: X: %x, Y: %x\n", xx, yy)
+	proofct, err := proof.GenerateEqualProof(params, transferAmount, ctx.transfer.First().Copy(), alice.sk)
+	require.Nil(t, err)
+	A1 := elliptic.Marshal(bob.sk.Curve, proofct.A1.X, proofct.A1.Y)
+	A2 := elliptic.Marshal(bob.sk.Curve, proofct.A2.X, proofct.A2.Y)
+	z := proofct.Z.Bytes()
+	fmt.Printf("The proof is(anyone can verify this proof with alice's pk): A1: %x, A2: %x, z: %x\n", A1, A2, z)
+	r := proof.VerifyEqualProof(params, encryptedTransfer, transferAmount, new(utils.ECPoint).SetFromPublicKey(&alice.sk.PublicKey), proofct)
+	fmt.Println("Verify result: ", r)
+
+	fmt.Scanln()
+	fmt.Println("")
+	receiver := authAlice.From
 	burn(t, params, alice, receiver, token, auth, ethclient, pgc)
+	receiver = authBob.From
 	burn(t, params, bob, receiver, token, auth, ethclient, pgc)
 }
 
@@ -131,8 +184,7 @@ func setForToken(t *testing.T, addrs []common.Address, auth *bind.TransactOpts, 
 	return token
 }
 
-func initTestAccount(t *testing.T, params proof.AggRangeParams, token common.Address, amount *big.Int, name string, auth *bind.TransactOpts, ethclient *ethclient.Client, pgc *pgcm.Pgc) *Account {
-	alice := CreateTestAccount(params, name, amount)
+func initTestAccount(t *testing.T, alice *Account, params proof.AggRangeParams, token common.Address, amount *big.Int, name string, auth *bind.TransactOpts, ethclient *ethclient.Client, pgc *pgcm.Pgc) *Account {
 	alicePK := [2]*big.Int{alice.sk.PublicKey.X, alice.sk.PublicKey.Y}
 
 	var aliceTx *types.Transaction
@@ -155,13 +207,13 @@ func initTestAccount(t *testing.T, params proof.AggRangeParams, token common.Add
 	alice.UpdateBalance(aliceEncryptB.Nonce, aliceEncryptB.Ct)
 	require.Equal(t, amount.Bytes(), alice.m.Bytes(), "account'balance on chain not same with local", "expect", amount, "actual", alice.m)
 
-	log.Info("deposit account success", "token", token.Hash().Hex(), "who", name, "amount", amount, "gas", receipt.GasUsed)
+	log.Info("deposit account success", "token", token.Hash().Hex(), "who", name, "amount", amount, "gas", receipt.GasUsed, "tx", aliceTx.Hash().Hex())
 	auth.Value = nil
 
 	return alice
 }
 
-func aggTransfer(t *testing.T, params proof.AggRangeParams, from, to *Account, token common.Address, amount *big.Int, auth *bind.TransactOpts, ethclient *ethclient.Client, pgc *pgcm.Pgc) {
+func aggTransfer(t *testing.T, params proof.AggRangeParams, from, to *Account, token common.Address, amount *big.Int, auth *bind.TransactOpts, ethclient *ethclient.Client, pgc *pgcm.Pgc) *ConfidentialTx {
 	ctx, err := CreateConfidentialTx(params, from, &to.sk.PublicKey, amount, token.Hash().Big())
 	require.Nil(t, err, "generate condidential tx failed", err)
 	input := ctx.ToSolidityInput()
@@ -191,7 +243,9 @@ func aggTransfer(t *testing.T, params proof.AggRangeParams, from, to *Account, t
 	to.UpdateBalance(encryptB.Nonce, encryptB.Ct)
 	require.Equal(t, shouldBe.Bytes(), to.m.Bytes(), "receiver's balance on chain invalid", "expect", shouldBe, "acutal", to.m)
 
-	log.Info("agg transfer", "token", token.Hash().Hex(), "amount", amount, "gas", receipt.GasUsed)
+	log.Info("agg transfer", "token", token.Hash().Hex(), "amount", amount, "gas", receipt.GasUsed, "tx", tx.Hash().Hex())
+
+	return ctx
 }
 
 func burn(t *testing.T, params proof.AggRangeParams, from *Account, receiver, token common.Address, auth *bind.TransactOpts, ethclient *ethclient.Client, pgc *pgcm.Pgc) {
@@ -216,7 +270,7 @@ func burn(t *testing.T, params proof.AggRangeParams, from *Account, receiver, to
 	from.UpdateBalance(encryptB.Nonce, encryptB.Ct)
 	require.Equal(t, uint64(0), from.m.Uint64(), "receiver's balance on chain invalid", "expect", 0, "acutal", from.m)
 
-	log.Info("burn tx", "token", token.Hash().Hex(), "amount", input.Amount, "gas", receipt.GasUsed)
+	log.Info("burn tx", "token", token.Hash().Hex(), "amount", input.Amount, "gas", receipt.GasUsed, "tx", btx.Hash().Hex())
 }
 
 func isToken(token common.Address) bool {
