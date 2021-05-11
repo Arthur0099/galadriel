@@ -14,6 +14,7 @@ import (
 	log "github.com/inconshreveable/log15"
 	"github.com/pgc/client"
 	pgcm "github.com/pgc/contracts/pgc"
+	tokenpkg "github.com/pgc/contracts/token"
 	"github.com/pgc/contracts/tokenconverter"
 	"github.com/pgc/contracts/verifier"
 	"github.com/pgc/deployer"
@@ -91,14 +92,31 @@ func testPGCSystemContract(t *testing.T, tokenTest bool, auth *bind.TransactOpts
 		token = setForToken(t, addrs, auth, ethclient)
 	}
 
-	// cross pipe fine enable caution drift pioneer garden report volcano slight portion
-
 	fmt.Scanln()
-
-	authAlice := client.GetAccountWithKey("92549442deda12f9b6643cb5cace7f13c62adb6ca30a7505c48fdae9f14fe16c")
+	// snap joke lazy talent prepare expect fence draw label delay balance erode
+	authAlice := client.GetAccountWithKey("69f1a5e97304fd38cf0840182a988b51c3e566aae1862264443c985a1a5af682")
+	log.Info("", "alice", authAlice.From.Hex())
 	client.SetNonce(authAlice, ethclient)
-	authBob := client.GetAccountWithKey("ea7036d37d80ae16bae54ceb1cd38ec8288df631771e898890bb2aac8ed42f61")
+	authBob := client.GetAccountWithKey("681a477af4f60c5068f4d279e697d6741205e353dc4f24bb0dbdf79c8be40107")
 	client.SetNonce(authBob, ethclient)
+
+	// mint token for alice and bob
+	if tokenTest {
+		tokenContract, _ := tokenpkg.NewToken(token, ethclient)
+		_, err := tokenContract.Transfer(auth, authAlice.From, new(big.Int).Mul(utils.Ether, big.NewInt(60)))
+		require.Nil(t, err)
+		auth.Nonce.Add(auth.Nonce, utils.One)
+		tx, err := tokenContract.Transfer(auth, authBob.From, new(big.Int).Mul(utils.Ether, big.NewInt(30)))
+		require.Nil(t, err)
+		auth.Nonce.Add(auth.Nonce, utils.One)
+		// approve
+		tokenContract.Approve(authAlice, addrs[len(addrs)-1], new(big.Int).Mul(utils.Ether, big.NewInt(1000)))
+		tx, err = tokenContract.Approve(authBob, addrs[len(addrs)-1], new(big.Int).Mul(utils.Ether, big.NewInt(1000)))
+		require.Nil(t, err)
+		authAlice.Nonce.Add(authAlice.Nonce, utils.One)
+		authBob.Nonce.Add(authBob.Nonce, utils.One)
+		client.WaitForTx(ethclient, tx.Hash())
+	}
 
 	// alice
 	aliceAmount := new(big.Int).SetUint64(512)
@@ -193,7 +211,6 @@ func initTestAccount(t *testing.T, alice *Account, params proof.AggRangeParams, 
 		auth.Value = new(big.Int).Mul(utils.Ether, amount)
 		auth.Value.Div(auth.Value, precision)
 		aliceTx, err = pgc.DepositAccountETH(auth, alicePK)
-
 	} else {
 		aliceTx, err = pgc.DepositAccount(auth, alicePK, token, amount)
 	}
