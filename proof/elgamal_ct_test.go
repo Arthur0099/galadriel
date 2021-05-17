@@ -32,38 +32,29 @@ func TestKeyGenerate(t *testing.T) {
 }
 
 func TestCT(t *testing.T) {
-	curves := []elliptic.Curve{curve.BN256(), curve.S256()}
-	bitsize := 16
+	params := DAggRangeProofParams32()
 
-	msgs := []*big.Int{
-		big.NewInt(0),
-		big.NewInt(1),
-		big.NewInt(2),
-		big.NewInt(-1),
+	msg := big.NewInt(2)
+
+	BuildAndLoadMapIfNotExist(params.G(), 32, 7, 4)
+
+	// generate key.
+	key, err := GenerateKey(params)
+	require.Nil(t, err, "generate key failed")
+
+	// Encrypt msg.
+	// Just use a certain r for test.
+	ct, err := Encrypt(params, &key.PublicKey, msg.Bytes())
+	require.Nil(t, err, "encrypt data failed")
+
+	newMsg := Decrypt(params, key, ct.CopyPublicPoint())
+	if !bytes.Equal(msg.Bytes(), newMsg) {
+		t.Error("encrypt/decrypt msg not equal")
 	}
 
-	for _, curve := range curves {
-		for _, msg := range msgs {
-			params := newRandomCTParams(curve, bitsize)
-			// generate key.
-			key, err := GenerateKey(params)
-			require.Nil(t, err, "generate key failed")
-
-			// Encrypt msg.
-			// Just use a certain r for test.
-			ct, err := Encrypt(params, &key.PublicKey, msg.Bytes())
-			require.Nil(t, err, "encrypt data failed")
-
-			newMsg := Decrypt(params, key, ct.CopyPublicPoint())
-			if !bytes.Equal(msg.Bytes(), newMsg) {
-				t.Error("encrypt/decrypt msg not equal")
-			}
-
-			nct, err := Refresh(params, key, ct.CopyPublicPoint())
-			require.Nil(t, err, "refresh failed")
-			assert.NotEqual(t, ct.R, nct.R, "randome equal after refresh")
-		}
-	}
+	nct, err := Refresh(params, key, ct.CopyPublicPoint())
+	require.Nil(t, err, "refresh failed")
+	assert.NotEqual(t, ct.R, nct.R, "randome equal after refresh")
 }
 
 func TestEncryptTransfer(t *testing.T) {

@@ -396,8 +396,6 @@ func getEncryptedMsg(sk *ecdsa.PrivateKey, ct *CTEncPoint) *utils.ECPoint {
 // decryptencodedmsg decrypts and returns original bytes of msg.
 // encodeMsg = g * m
 func decryptEncodedMsg(params CTParams, encodeMsg *utils.ECPoint) []byte {
-	bit := uint64(params.Bitsize())
-	upperLimit := new(big.Int).Exp(utils.Two, new(big.Int).SetUint64(bit), nil)
 	g := params.G().Copy()
 
 	// encode zero.
@@ -407,18 +405,8 @@ func decryptEncodedMsg(params CTParams, encodeMsg *utils.ECPoint) []byte {
 	if encodeMsg.Equal(g) {
 		return utils.One.Bytes()
 	}
-	// ethereum的crypto下的secpk的add传入的x1, y1; x2, y2为同样的点会报错(同样的指针)
-	point := new(utils.ECPoint).ScalarMult(g, utils.Two)
-	for i := new(big.Int).SetUint64(2); i.Cmp(upperLimit) == -1; {
-		if point.Equal(encodeMsg) {
-			return i.Bytes()
-		}
 
-		point.Add(point, g)
-		i.Add(i, utils.One)
-	}
-
-	return []byte{}
+	return ShanksDlog(g, encodeMsg, params.Bitsize(), 7).Bytes()
 }
 
 // Refresh Ciphertext refreshing algorithm: output a fresh ciphertext for the message encrypted in CT.
