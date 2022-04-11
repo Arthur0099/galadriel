@@ -50,9 +50,9 @@ func DAggRangeProofParams() AggRangeParams {
 
 const (
 	// Bitsize only change to fit solidity input size.
-	Bitsize = 64
+	Bitsize = 32
 	// N : 2^N = 64.
-	N    = 6
+	N    = 5
 	step = 1
 	// LRsize is the size of l, r
 	LRsize = N + step

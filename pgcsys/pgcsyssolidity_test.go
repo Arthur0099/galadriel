@@ -84,8 +84,9 @@ func TestPGCSystemContractTokenLocal(t *testing.T) {
 
 func testPGCSystemContract(t *testing.T, tokenTest bool, auth *bind.TransactOpts, ethclient *ethclient.Client) {
 	addrs, pgc := deployer.DeployPGCSystemAllContract(auth, ethclient)
-	params := proof.DAggRangeProofParamsWithBitsize(64)
-	deployer.InitVector(auth, ethclient, addrs[2], 64)
+	params := proof.DAggRangeProofParams32()
+	proof.LoadMap(32, 7)
+	deployer.InitVector(auth, ethclient, addrs[2], 32)
 
 	token := common.Address{}
 	if tokenTest {
@@ -203,16 +204,16 @@ func setForToken(t *testing.T, addrs []common.Address, auth *bind.TransactOpts, 
 }
 
 func initTestAccount(t *testing.T, alice *Account, params proof.AggRangeParams, token common.Address, amount *big.Int, name string, auth *bind.TransactOpts, ethclient *ethclient.Client, pgc *pgcm.Pgc) *Account {
-	alicePK := [2]*big.Int{alice.sk.PublicKey.X, alice.sk.PublicKey.Y}
+	alicePK := new(utils.ECPoint).SetFromPublicKey(&alice.sk.PublicKey)
 
 	var aliceTx *types.Transaction
 	var err error
 	if isToken(token) {
 		auth.Value = new(big.Int).Mul(utils.Ether, amount)
 		auth.Value.Div(auth.Value, precision)
-		aliceTx, err = pgc.DepositAccountETH(auth, alicePK)
+		aliceTx, err = pgc.DepositAccountETH(auth, alicePK.Compress())
 	} else {
-		aliceTx, err = pgc.DepositAccount(auth, alicePK, token, amount)
+		aliceTx, err = pgc.DepositAccount(auth, alicePK.Compress(), token, amount)
 	}
 
 	require.Nil(t, err, "deposit contract failed")
@@ -237,9 +238,9 @@ func aggTransfer(t *testing.T, params proof.AggRangeParams, from, to *Account, t
 
 	var tx *types.Transaction
 	if isToken(token) {
-		tx, err = pgc.AggTransferETH(auth, input.points, input.scalars, input.l, input.r)
+		tx, err = pgc.AggTransferETH(auth, input.points, input.scalars, input.lr)
 	} else {
-		tx, err = pgc.AggTransfer(auth, input.points, input.scalars, token.Hash().Big(), input.l, input.r)
+		tx, err = pgc.AggTransfer(auth, input.points, input.scalars, token.Hash().Big(), input.lr)
 	}
 
 	require.Nil(t, err, "create agg transfer tx failed", err)
@@ -273,9 +274,9 @@ func burn(t *testing.T, params proof.AggRangeParams, from *Account, receiver, to
 
 	var btx *types.Transaction
 	if isToken(token) {
-		btx, err = pgc.BurnETH(auth, receiver, input.Amount, input.PubKey, input.Proof, input.Z)
+		btx, err = pgc.BurnETH(auth, receiver, input.Amount, input.Points, input.Z)
 	} else {
-		btx, err = pgc.Burn(auth, receiver, token.Hash().Big(), input.Amount, input.PubKey, input.Proof, input.Z)
+		btx, err = pgc.Burn(auth, receiver, token.Hash().Big(), input.Amount, input.Points, input.Z)
 	}
 
 	require.Nil(t, err, "create burn tx failed")

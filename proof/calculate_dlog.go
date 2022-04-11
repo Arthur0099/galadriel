@@ -63,6 +63,10 @@ func buildHashMap(g *utils.ECPoint, rangeLen, tunning, roNum int) {
 	loadHashMap(rangeLen, tunning)
 }
 
+func LoadMap(rangeLen, tunning int) {
+	loadHashMap(rangeLen, tunning)
+}
+
 func loadHashMap(rangeLen, tunning int) {
 	giantStepSize := 2 << (rangeLen/2 + tunning - 1)
 	bytesLen := giantStepSize * Compressed

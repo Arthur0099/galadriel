@@ -128,6 +128,24 @@ func (ec *ECPoint) Negation(other *ECPoint) *ECPoint {
 	return ec
 }
 
+// Compress compress the point.
+func (ec *ECPoint) Compress() []byte {
+	ec.checkNil()
+
+	compressed := make([]byte, 33)
+	format := byte(0x2)
+	// odd
+	if ec.Y.Bit(0) == 1 {
+		format |= 0x1
+	}
+
+	compressed[0] = format
+	xbytes := ec.X.Bytes()
+	copy(compressed[33-len(xbytes):], ec.X.Bytes())
+
+	return compressed
+}
+
 // ScalarMult returns ec * scalar.
 // set ec to new point.
 func (ec *ECPoint) ScalarMult(base *ECPoint, k *big.Int) *ECPoint {

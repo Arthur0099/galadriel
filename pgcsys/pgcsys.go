@@ -30,9 +30,10 @@ type ConfidentialTx struct {
 }
 
 type solidityPGCInput struct {
-	points [36]*big.Int
+	// 36
+	points []byte
 
-	l, r [proof.LRsize * 2]*big.Int
+	lr []byte
 
 	scalars [10]*big.Int
 }
@@ -40,51 +41,34 @@ type solidityPGCInput struct {
 // ToSolidityInput formats tx to solidity to verify contract
 func (tx *ConfidentialTx) ToSolidityInput() *solidityPGCInput {
 	input := solidityPGCInput{}
-	input.points[0] = tx.pk1.X
-	input.points[1] = tx.pk1.Y
-	input.points[2] = tx.pk2.X
-	input.points[3] = tx.pk2.Y
-	input.points[4] = tx.transfer.X1.X
-	input.points[5] = tx.transfer.X1.Y
-	input.points[6] = tx.transfer.X2.X
-	input.points[7] = tx.transfer.X2.Y
-	input.points[8] = tx.transfer.Y.X
-	input.points[9] = tx.transfer.Y.Y
-	input.points[10] = tx.sigmaPTEqualityProof.A1.X
-	input.points[11] = tx.sigmaPTEqualityProof.A1.Y
-	input.points[12] = tx.sigmaPTEqualityProof.A2.X
-	input.points[13] = tx.sigmaPTEqualityProof.A2.Y
-	input.points[14] = tx.sigmaPTEqualityProof.B.X
-	input.points[15] = tx.sigmaPTEqualityProof.B.Y
-	input.points[16] = tx.refreshBalance.X.X
-	input.points[17] = tx.refreshBalance.X.Y
-	input.points[18] = tx.refreshBalance.Y.X
-	input.points[19] = tx.refreshBalance.Y.Y
-	input.points[20] = tx.sigmaCTValidProof.A.X
-	input.points[21] = tx.sigmaCTValidProof.A.Y
-	input.points[22] = tx.sigmaCTValidProof.B.X
-	input.points[23] = tx.sigmaCTValidProof.B.Y
-	input.points[24] = tx.sigmaDlogeqProof.A1.X
-	input.points[25] = tx.sigmaDlogeqProof.A1.Y
-	input.points[26] = tx.sigmaDlogeqProof.A2.X
-	input.points[27] = tx.sigmaDlogeqProof.A2.Y
+	input.points = make([]byte, 0)
+	input.points = append(input.points, tx.pk1.Compress()...)
+	input.points = append(input.points, tx.pk2.Compress()...)
+	input.points = append(input.points, tx.transfer.X1.Compress()...)
+	input.points = append(input.points, tx.transfer.X2.Compress()...)
+	input.points = append(input.points, tx.transfer.Y.Compress()...)
+	input.points = append(input.points, tx.sigmaPTEqualityProof.A1.Compress()...)
+	input.points = append(input.points, tx.sigmaPTEqualityProof.A2.Compress()...)
+	input.points = append(input.points, tx.sigmaPTEqualityProof.B.Compress()...)
+	input.points = append(input.points, tx.refreshBalance.X.Compress()...)
+	input.points = append(input.points, tx.refreshBalance.Y.Compress()...)
+	input.points = append(input.points, tx.sigmaCTValidProof.A.Compress()...)
+	input.points = append(input.points, tx.sigmaCTValidProof.B.Compress()...)
+	input.points = append(input.points, tx.sigmaDlogeqProof.A1.Compress()...)
+	input.points = append(input.points, tx.sigmaDlogeqProof.A2.Compress()...)
 	// range proof.
-	input.points[28] = tx.bulletProof.A.X
-	input.points[29] = tx.bulletProof.A.Y
-	input.points[30] = tx.bulletProof.S.X
-	input.points[31] = tx.bulletProof.S.Y
-	input.points[32] = tx.bulletProof.T1.X
-	input.points[33] = tx.bulletProof.T1.Y
-	input.points[34] = tx.bulletProof.T2.X
-	input.points[35] = tx.bulletProof.T2.Y
+	input.points = append(input.points, tx.bulletProof.A.Compress()...)
+	input.points = append(input.points, tx.bulletProof.S.Compress()...)
+	input.points = append(input.points, tx.bulletProof.T1.Compress()...)
+	input.points = append(input.points, tx.bulletProof.T2.Compress()...)
 
 	// L, R
+	input.lr = make([]byte, 0)
 	for i := 0; i < tx.bulletProof.Len(); i++ {
-		input.l[i*2] = tx.bulletProof.Li(i).X
-		input.l[i*2+1] = tx.bulletProof.Li(i).Y
-
-		input.r[i*2] = tx.bulletProof.Ri(i).X
-		input.r[i*2+1] = tx.bulletProof.Ri(i).Y
+		input.lr = append(input.lr, tx.bulletProof.Li(i).Compress()...)
+	}
+	for i := 0; i < tx.bulletProof.Len(); i++ {
+		input.lr = append(input.lr, tx.bulletProof.Ri(i).Compress()...)
 	}
 
 	// scalar
@@ -222,17 +206,19 @@ type BurnETHTx struct {
 type burnEHTTxInput struct {
 	Receiver common.Address
 	Amount   *big.Int
-	PubKey   [2]*big.Int
-	Proof    [4]*big.Int
+	Points   []byte
 	Z        *big.Int
 }
 
 func (btx *BurnETHTx) ToSolidityInput() *burnEHTTxInput {
+	ps := make([]byte, 0)
+	ps = append(ps, btx.Account.Compress()...)
+	ps = append(ps, btx.Proof.A1.Compress()...)
+	ps = append(ps, btx.Proof.A2.Compress()...)
 	return &burnEHTTxInput{
 		Receiver: btx.Receiver,
 		Amount:   new(big.Int).Set(btx.Amount),
-		PubKey:   [2]*big.Int{btx.Account.X, btx.Account.Y},
-		Proof:    [4]*big.Int{btx.Proof.A1.X, btx.Proof.A1.Y, btx.Proof.A2.X, btx.Proof.A2.Y},
+		Points:   ps,
 		Z:        btx.Proof.Z,
 	}
 }
