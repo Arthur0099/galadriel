@@ -33,7 +33,7 @@ type Transaction struct {
 	Value    string         `json:"value"`
 	GasLimit string         `json:"gasLimit"`
 	GasPrice string         `json:"gasPrice"`
-	Data     []byte         `json:"data"`
+	Data     string         `json:"data"`
 }
 
 // Dial connect to rpc client
@@ -99,15 +99,18 @@ func (c *Client) SendETH(from common.Address, to common.Address, amount *big.Int
 	tx := Transaction{}
 	tx.From = from
 	tx.To = to
-	tx.Value = new(big.Int).Mul(amount, ether).String()
-	tx.GasLimit = "100000"
+	tx.Value = "0x" + new(big.Int).Mul(amount, ether).String()
+	tx.GasLimit = "0x100000"
+	tx.GasPrice = "0x9184e72a00"
+	tx.Data = "0x0"
+	tx.Nonce = "0x0"
 
 	return c.SendTx(&tx)
 }
 
 // GetAccountWithETH send eth to an random account.
-func (c *Client) GetAccountWithETH() *bind.TransactOpts {
-	account := GenerateAccount()
+func (c *Client) GetAccountWithETH(client *ethclient.Client) *bind.TransactOpts {
+	account := GenerateAccount(client)
 
 	if _, err := c.SendFromFirstAccout(account.From, amount); err != nil {
 		panic(err)
@@ -119,6 +122,7 @@ func (c *Client) GetAccountWithETH() *bind.TransactOpts {
 const (
 	ropstenInfura = "https://ropsten.infura.io/v3/10d08c76bb104f6286f774ec21fa7ac9"
 	local         = "http://127.0.0.1:8545"
+	scrollUrlL2   = "https://prealpha.scroll.io/l2"
 )
 
 // GetClient returns ethclient, otherwise panic.
@@ -129,6 +133,11 @@ func GetClient(url string) *ethclient.Client {
 // GetRopstenInfura returns infura client on main net.
 func GetRopstenInfura() *ethclient.Client {
 	return getClient(ropstenInfura)
+}
+
+// GetScrollClientL2 return client for l2 testnet
+func GetScrollClientL2() *ethclient.Client {
+	return getClient(scrollUrlL2)
 }
 
 // GetLocal return client on local net.
@@ -156,28 +165,45 @@ func getClient(url string) *ethclient.Client {
 }
 
 // GetAccountWithKey returns opts for sending tx.
-func GetAccountWithKey(keyhex string) *bind.TransactOpts {
+func GetAccountWithKey(keyhex string, client *ethclient.Client) *bind.TransactOpts {
 	key, err := crypto.HexToECDSA(keyhex)
 	if err != nil {
 		panic(err)
 	}
+	chainID, err := client.ChainID(context.Background())
+	if err != nil {
+		panic(err)
+	}
 
-	return bind.NewKeyedTransactor(key)
+	auth, err := bind.NewKeyedTransactorWithChainID(key, chainID)
+	if err != nil {
+		panic(err)
+	}
+
+	return auth
 }
 
 // GetRopstenAccount returns default ropsten test account.
-func GetRopstenAccount() *bind.TransactOpts {
+func GetRopstenAccount(client *ethclient.Client) *bind.TransactOpts {
 	keyhex := "B38BB7EF4D69CCB1D5A1735887521BC1717AF203AE8BE7F8928E9ECC54FFD5E3"
-	return GetAccountWithKey(keyhex)
+	return GetAccountWithKey(keyhex, client)
 }
 
 // GenerateAccount generates a new random account.
-func GenerateAccount() *bind.TransactOpts {
+func GenerateAccount(client *ethclient.Client) *bind.TransactOpts {
 	key, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err)
 	}
-	return bind.NewKeyedTransactor(key)
+	chainID, err := client.ChainID(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	auth, err := bind.NewKeyedTransactorWithChainID(key, chainID)
+	if err != nil {
+		panic(err)
+	}
+	return auth
 }
 
 // SetNonce sets nonce to account if nil.

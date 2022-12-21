@@ -1,4 +1,4 @@
-package pgc
+package main
 
 import (
 	"encoding/json"
@@ -45,6 +45,10 @@ var contractsName = []map[string]string{
 	{
 		"name": "Verifier",
 	},
+}
+
+func main() {
+	GenerateGoCode(false)
 }
 
 // GenerateGoCode automatically generates go files for contract defined in truffle contracts.

@@ -47,7 +47,7 @@ func TestDeployPGCToMainnet(t *testing.T) {
 	deployerKey := os.Getenv("deployerKey")
 
 	ethclient := client.GetClient(mainnetURL)
-	auth := client.GetAccountWithKey(deployerKey)
+	auth := client.GetAccountWithKey(deployerKey, ethclient)
 	auth.GasLimit = 7500000
 	addrs, _ := deployer.DeployPGCSystemAllContract(auth, ethclient)
 
@@ -56,12 +56,20 @@ func TestDeployPGCToMainnet(t *testing.T) {
 	log.Info("token contract", "addr", token.Hex())
 }
 
+func TestPGCSystemTokenOnScroll(t *testing.T) {
+	ethclient := client.GetScrollClientL2()
+	// replace with account.
+	auth := client.GetAccountWithKey("74175140cb1ed8129dfeba9df037ba68981d91608109da4c602e7fb30ee36601", ethclient)
+
+	testPGCSystemContract(t, true, auth, ethclient)
+}
+
 func TestPGCSystemContractETHRopsten(t *testing.T) {
 	skipRopsten(t)
 
 	ethclient := client.GetRopstenInfura()
 	// replace with account.
-	auth := client.GetRopstenAccount()
+	auth := client.GetRopstenAccount(ethclient)
 
 	testPGCSystemContract(t, false, auth, ethclient)
 }
@@ -69,7 +77,7 @@ func TestPGCSystemContractETHRopsten(t *testing.T) {
 func TestPGCSystemContractETHLocal(t *testing.T) {
 	rpcclient := client.GetLocalRPC()
 	ethclient := client.GetLocal()
-	auth := rpcclient.GetAccountWithETH()
+	auth := rpcclient.GetAccountWithETH(ethclient)
 
 	testPGCSystemContract(t, false, auth, ethclient)
 }
@@ -77,7 +85,7 @@ func TestPGCSystemContractETHLocal(t *testing.T) {
 func TestPGCSystemContractTokenLocal(t *testing.T) {
 	rpcclient := client.GetLocalRPC()
 	ethclient := client.GetLocal()
-	auth := rpcclient.GetAccountWithETH()
+	auth := rpcclient.GetAccountWithETH(ethclient)
 
 	testPGCSystemContract(t, true, auth, ethclient)
 }
@@ -95,10 +103,10 @@ func testPGCSystemContract(t *testing.T, tokenTest bool, auth *bind.TransactOpts
 
 	fmt.Scanln()
 	// snap joke lazy talent prepare expect fence draw label delay balance erode
-	authAlice := client.GetAccountWithKey("69f1a5e97304fd38cf0840182a988b51c3e566aae1862264443c985a1a5af682")
+	authAlice := client.GetAccountWithKey("69f1a5e97304fd38cf0840182a988b51c3e566aae1862264443c985a1a5af682", ethclient)
 	log.Info("", "alice", authAlice.From.Hex())
 	client.SetNonce(authAlice, ethclient)
-	authBob := client.GetAccountWithKey("681a477af4f60c5068f4d279e697d6741205e353dc4f24bb0dbdf79c8be40107")
+	authBob := client.GetAccountWithKey("681a477af4f60c5068f4d279e697d6741205e353dc4f24bb0dbdf79c8be40107", ethclient)
 	client.SetNonce(authBob, ethclient)
 
 	// mint token for alice and bob
@@ -303,7 +311,7 @@ func TestAggTransferByV2Local(t *testing.T) {
 
 	rpcclient := client.GetLocalRPC()
 	ethclient := client.GetLocal()
-	auth := rpcclient.GetAccountWithETH()
+	auth := rpcclient.GetAccountWithETH(ethclient)
 
 	paramsAddr, _ := deployer.DeployParams(auth, ethclient)
 	addr, _, con, _ := verifier.DeployVerifier(auth, ethclient, paramsAddr)

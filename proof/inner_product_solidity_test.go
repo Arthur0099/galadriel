@@ -21,7 +21,7 @@ func TestInnerProductContractVerify(t *testing.T) {
 
 	rpcclient := client.GetLocalRPC()
 	ethclient := client.GetLocal()
-	auth := rpcclient.GetAccountWithETH()
+	auth := rpcclient.GetAccountWithETH(ethclient)
 	_, ipcon := deployer.DeployInnerProduct(auth, ethclient)
 
 	cases := []int{2, 4, 8, 16, 32, 64}

@@ -16,7 +16,7 @@ import (
 func TestRangeProofContractVerify(t *testing.T) {
 	rpcclient := client.GetLocalRPC()
 	ethclient := client.GetLocal()
-	auth := rpcclient.GetAccountWithETH()
+	auth := rpcclient.GetAccountWithETH(ethclient)
 	innerAddr, _ := deployer.DeployInnerProduct(auth, ethclient)
 	_, rangeCon := deployer.DeployRangeproofverifier(auth, ethclient, innerAddr)
 

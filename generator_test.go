@@ -1,4 +1,4 @@
-package pgc
+package main
 
 import (
 	"testing"
