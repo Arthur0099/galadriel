@@ -1,170 +1,33 @@
 # PGC
 
-PGC(Pretty Good Confidential Transaction System with Accountability)是一种基于账户体现的加密交易系统。
+PGC(Pretty Good Confidential Transaction System with Accountability)是一种基于账户体现的可监管加密交易系统。普通用户可以使用该系统进行隐私交易转账，拥有`Global Key`的机构可以对所有交易进行监管，同时本系统还提供诸如反洗钱等（线性升级策略）审计功能。
 
-使用到的底层技术：
-* Elgamal: 作用pgc账户体系的pke使用，其公钥对交易数据进行加密，提供隐私。**对原生的加密和解密的方法进行了修改，以适应bulletproof**
-* BulletProof: 提供零知识证明相关功能。
-* ECDSA: 提供签名和验签等相关功能，与以太坊和比特币兼容。
+## 部署测试
 
-# 整体流程
+在测试之前，需要安装`golang`和`ganache`，同时在`.env`中设置好相应的配置，可参照`.env.example`。
 
-## 公共参数生成
+`.env`详细配置如下:
 
+- TestMemo: 启动本地链使用的助记词
+- DeployerKey: 合约部署者私钥
+- AliceKey: 测试用户 alice 私钥
+- BobKey: 测试用户 bob 私钥
+- GlobalKey: 监管者私钥
 
+启动本地区块链
 
-1. prover对其秘密数据v今次进行commit，获得m个变量，這些变量代表着秘密输入v.
-2. prover进行以下步骤生成constraints。
-   1. 
+```bash
+ganache -m $your_memo
+```
 
+执行测试
 
-# 交易流程
+```bash
+cd test
 
-交易开始前，Alice的账户上的余额为CA；Bob的账户上的余额为CB，其中，CA是使用了Alice公钥加密后的数据；CB是使用了Bob的工钥加密后的数据。
-Cout=(X1, Y1); Cin=(X2, Y2)
+go test -v -timeout 1h -run="TestPGCSystemContractTokenLocal"
+```
 
-例如：Alice向Bob转帐V个。
-1. Alice使用自己的工钥和Bob的工钥分别对V进行加密，得到加密后的输出Cout和Cin。
-2. 提供相应的零知识证明的相关数据。
-   * L1(证明Cout中和Cin中加密的值一致)：使用Σ-protocol进行证明：(需要传入的数据如下（pk1, Cout， pk2, Cin）)
-     * Prover随机选取a1,a2,b；并且计算A1=pk1^a1; A2=pk2^a2; B1=g^a1 * h^b; B2=g^a2 * h^b;并将其发送至Verifier。
-     * Verifier随机选择e并将其发送给Prover作为一个挑战。
-     * Prover计算z1=a1+e×r1; z2=a2+e×r2; z3=b+e*v(Alice自己知道V的值是多少)；并将z1,z2,z3发送给Verifier。
-     * Verifier计算以下：pk1^z1==A1* X1^e; pk2^z2==A2 * X2^e; g^z1 * h^z3 == B1* Y1^e; g^z2 * h^z3 == B2 * Y2^e;
-     * **因为在上诉的过程中，Prover和Verifier需要进行交互，所以使用Fiat－Shamir来替换其中e的选择**Prover自己使用Hash（g， h， ）参数待定来自行计算e的值，最后一次性将
-     所有的数据发送给Verifier，因为Hash方法的不可预测性，所有Prover伪造证明的几率较小。Verifier可以根据同样的规则计算出e是多少值，从而进行验证。
-  * L2(Alice转账额V处于一定范围)：使用bulletproof的rangeproof进行证明。
-  * L3(Alice转账后的余额大于0,处于一定范围)：
-    * 因为Alice并不知道CA-Cout值中对应的随机数是多少，所以她无法直接对CA-Cout提供一个零知识证明。但是，因为CA-Cout是用Alice的公钥加密的，所以Alice可以先对CA-Cout进行
-    解密，然后使用一个新的随机数生成新的加密数据C’；然后证明以下内容：
-    * CA-Cout和C’加密的是同样的数据
-    * 使用零知识证明证明C‘是处于一定范围内的。 现在新的加密后的数据为（X‘， Y’）， X‘＝pk1^r’；Y‘＝g^r' * h^(m-v)； 原数据为（X1, Y1）, X1=pk1^r1; Y1=g^r1 * h^(m-v);
-    所以等同于证明log Ỹ /Y ′ X̃/X ′ equals log g pk 1 with witness sk 1
-    * Σ2:输入参数（Y’/Y1, X'/X1, g, pk1）（以g1, h1, g2, h2代替）, witness为sk1(Aclice的私钥)：
-      * Prover随机选取a，计算A1=g1^a；A2=g2^a；并发送给Verifier；
-      * Verifier随机选择e发送给Prover
-      * Prover计算z＝a＋w×e；并将其发送至verifier（w即为sk1）
-      * Verifier计算g1^z＝＝A1*h1^e；g2^z＝A2*h2^e； 相等则接受证明。
-      * **同样使用Fiat－shamir来替换e的选择**
-     
-3. 
-# PKE
+执行结果
 
-PKE的相关功能由Elgamal算法提供，同时对其进行了调整以适应bulletproof。
-
-# Bulletproof
-
-bulletproof零知识证明。
-
-## 基本架构
-
-### rlcs_proof(constraint system)
-
-### inner product protocol
-
-用于压缩数据，减少协议中需要传输的数据量。
-
-
-
-## 参考
-
-* [百科](https://zh.wikipedia.org/wiki/ElGamal%E5%8A%A0%E5%AF%86%E7%AE%97%E6%B3%95)
-* [bulletproof-rust](https://doc-internal.dalek.rs/bulletproofs/notes/index.html)
-
-## zether对比
-
-1. 6.2优化.(pgc也用了里面的sigle muti)
-2. conftransfer中, sigmaproof和2个rangeproof共花费了156次加法和154次乘法.
-3. 关于multi-exponent的说法, 在18页.?? 反而会增加gas消耗.(不适合solidity)
-
-## pgc
-
-# 32bit
-transfer:
-1. sigma proof: 10 mul, 6 add.
-2. dle sigma proof: 4 mul, 4 add.
-3. range proof: 2*(bitSize+n)+14 mul, 2*(bitSize+n)+9 add.
-4. sig: 4 mul, 1 add.
-5. 其他: 8 add.
-
-1. mul: 40000 gas; add: 600 gas.
-
-2. transfer 共用了1次sigma, 1次dlesigma, 2次range: **194 mul, 185 add**,总共消耗gas**9182528**(曲线消耗**7871000**, 其余消耗**1311528**)
-3. zether 1次sigma, 2次range, 154 mul, 156 add. (曲线消耗**6253600**, 总共**718.8万**, 其余消耗**934400**)
-
-使用分叉后:
-mul: 6000 gas; add: 150 gas.
-transfer: **3191240**, 曲线**1191750**, 其余**1999490**
-
-# 16bit
-
-1. transfer, gas:**5894975**(曲线消耗**2914000**, 其余消耗**2980975**)
-
-使用分叉后: 
-mul: 6000 gas; add: 150 gas.
-gas:**2162394**(曲线消耗**442200**, 其余消耗**1720194**)
-
-
-# 最新对比
-
-gas cost 可能跟数据量有关, 需对点压缩后进行对比, 需要对所有输入进行修改, 要整体调整.
-
-pgc:
-* transfer
-  * gas cost: 8282015
-  * ec cost: 6695400(165 mul, 159 add)
-  * 其他cost: 1586615
-  * bytes: 2276
-* burn
-  * gas cost: 390134
-  * ec cost: 321800(8 mul, 3 add, sig and proof)
-  * bytes: 420
-* deposit/fund
-  * gas cost: 132311
-  * ec cost: 40000(1 mul)
-  * bytes: 128
-
-## transfer
-
-(165 mul, 159 add, 6695400 gas)
-
-### 其他
-
-(4 add, 2400)
-
-* verifyDLESigmaProof时, 根据链上的balance计算出更新后的balance, 进行验证: 2 add.
-* 更新receiver balance: 2 add.
-
-### verify pte proof
-
-(7 mul, 4 add, 282400)
-
-* check pk1 * z1 == A1 + X1 * e: 2 mul, 1 add.
-* check pk2 * z1 == A2 + X2 * e: 2 mul, 1 add.
-* Check h * z1 + g * z2 == B + Y * e: 3 mul, 2 add.
-
-### verify DLE SigmaProof
-
-(4 mul, 2 add, 161200)
-
-* g1^z == h1^e+A1: 2 mul, 1 add.
-* g2^z == h2^e+A2: 2 mul, 1 add.
-
-### verify CT Valid Proof(z1, z2与pte中变量不一致)
-
-(5 mul, 3 add, 201800)
-
-* pk1*z1 = A + X*e: 2 mul, 1 add.
-* g*z2 + h*z1 = B + Y*e: 3 mul, 2 add.
-
-### 聚合bulletproof
-
-lrSize: 6.
-
-ec分布(149 mul, 146 add, 曲线消耗gas: 6047600):
-* A+s*-x: 1 mul, 1 add.
-* li * xi^2 + ri * xi^-2: 12 mul, 12 add.
-* g*(tx-dleta) + h*t ?= v*(z^2 * z^m) + T1*x + T2*x^2: 6 mul, 4 add.
-* check bullet proof(105): 
-  * commit: 2*(vectorSize mul, vectorSize - 1 add): 128 mul, 126 add. (g^l, h^r)
-  * normal: 3 add, 2 mul
+![](assets/pictures/test-output.png)

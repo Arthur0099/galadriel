@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -16,7 +17,7 @@ import (
 
 var (
 	eth       = new(big.Int).SetUint64(1000 * 1000 * 1000 * 1000 * 1000 * 1000)
-	amount    = new(big.Int).SetUint64(10000)
+	amount    = new(big.Int).SetUint64(10)
 	amountWei = new(big.Int).Mul(amount, eth)
 )
 
@@ -93,17 +94,24 @@ func (c *Client) SendFromFirstAccout(to common.Address, amount *big.Int) (common
 	return c.SendETH(accounts[0], to, amount)
 }
 
+func (c *Client) GetPendingNonce(account common.Address) (string, error) {
+	var result hexutil.Uint64
+	err := c.client.CallContext(context.Background(), &result, "eth_getTransactionCount", account, "pending")
+
+	return result.String(), err
+}
+
 // SendETH send ether to one.
 func (c *Client) SendETH(from common.Address, to common.Address, amount *big.Int) (common.Hash, error) {
-	ether := new(big.Int).SetUint64(1000 * 1000 * 1000 * 1000 * 1000 * 1000)
 	tx := Transaction{}
 	tx.From = from
 	tx.To = to
-	tx.Value = "0x" + new(big.Int).Mul(amount, ether).String()
+	tx.Value = "0x" + amountWei.String()
 	tx.GasLimit = "0x100000"
 	tx.GasPrice = "0x9184e72a00"
 	tx.Data = "0x0"
-	tx.Nonce = "0x0"
+	nonce, _ := c.GetPendingNonce(from)
+	tx.Nonce = nonce
 
 	return c.SendTx(&tx)
 }
@@ -181,12 +189,6 @@ func GetAccountWithKey(keyhex string, client *ethclient.Client) *bind.TransactOp
 	}
 
 	return auth
-}
-
-// GetRopstenAccount returns default ropsten test account.
-func GetRopstenAccount(client *ethclient.Client) *bind.TransactOpts {
-	keyhex := "B38BB7EF4D69CCB1D5A1735887521BC1717AF203AE8BE7F8928E9ECC54FFD5E3"
-	return GetAccountWithKey(keyhex, client)
 }
 
 // GenerateAccount generates a new random account.

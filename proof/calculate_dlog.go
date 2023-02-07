@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"os"
+	"path/filepath"
 	"sync"
 
 	log "github.com/inconshreveable/log15"
@@ -15,7 +16,7 @@ import (
 // Global params
 var (
 	Compressed  = 33
-	hashMapFile = "hashMap"
+	hashMapFile = filepath.Join(os.Getenv("HOME"), "hashMap")
 )
 
 var point2Index = make(map[string]int, 0)

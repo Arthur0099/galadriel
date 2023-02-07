@@ -15,8 +15,14 @@ type BaseParams interface {
 	H() *utils.ECPoint
 }
 
+type GBaseParams interface {
+	BaseParams
+	Pub() *utils.ECPoint
+}
+
 type baseParams struct {
 	g, h *utils.ECPoint
+	pub  *utils.ECPoint
 }
 
 func (bp *baseParams) G() *utils.ECPoint {
@@ -27,15 +33,19 @@ func (bp *baseParams) H() *utils.ECPoint {
 	return bp.h
 }
 
+func (bp *baseParams) Pub() *utils.ECPoint {
+	return bp.pub
+}
+
 // PTEqualityProof .
 type PTEqualityProof struct {
-	A1, A2, B *utils.ECPoint
+	A1, A2, A3, B *utils.ECPoint
 
 	Z1, Z2 *big.Int
 }
 
-// GeneratePTEqualityProof generates proof to prove msg in two plaintext is the same.
-func GeneratePTEqualityProof(params BaseParams, pk1, pk2 *ecdsa.PublicKey, ct *MRTwistedELGamalCT) (*PTEqualityProof, error) {
+// GeneratePTEqualityProof generates proof to prove msg in two plaintext(and global key) is the same.
+func GeneratePTEqualityProof(params GBaseParams, pk1, pk2 *ecdsa.PublicKey, ct *MRTwistedELGamalCT) (*PTEqualityProof, error) {
 	curve := ct.X1.Curve
 	n := curve.Params().N
 
@@ -55,6 +65,8 @@ func GeneratePTEqualityProof(params BaseParams, pk1, pk2 *ecdsa.PublicKey, ct *M
 	proof.A1.ScalarMult(proof.A1, a)
 	proof.A2 = new(utils.ECPoint).SetFromPublicKey(pk2)
 	proof.A2.ScalarMult(proof.A2, a)
+	proof.A3 = params.Pub().Copy()
+	proof.A3.ScalarMult(proof.A3, a)
 
 	// B = g*b + h*a.
 	g := params.G()
@@ -62,7 +74,7 @@ func GeneratePTEqualityProof(params BaseParams, pk1, pk2 *ecdsa.PublicKey, ct *M
 	proof.B = new(utils.ECPoint).ScalarMult(g, b)
 	proof.B.Add(proof.B, new(utils.ECPoint).ScalarMult(h, a))
 
-	e, err := utils.ComputeChallengeByECPoints(curve.Params().N, proof.A1, proof.A2, proof.B)
+	e, err := utils.ComputeChallengeByECPoints(curve.Params().N, proof.A1, proof.A2, proof.A3, proof.B)
 	if err != nil {
 		return nil, err
 	}
@@ -85,13 +97,13 @@ func GeneratePTEqualityProof(params BaseParams, pk1, pk2 *ecdsa.PublicKey, ct *M
 }
 
 // VerifyPTEqualityProof verify proof.
-func VerifyPTEqualityProof(params BaseParams, pk1, pk2 *ecdsa.PublicKey, ct *MRTwistedELGamalCTPub, proof *PTEqualityProof) bool {
+func VerifyPTEqualityProof(params GBaseParams, pk1, pk2 *ecdsa.PublicKey, ct *MRTwistedELGamalCTPub, proof *PTEqualityProof) bool {
 	curve := pk1.Curve
 	n := curve.Params().N
 	// compute challenge.
-	e, err := utils.ComputeChallengeByECPoints(n, proof.A1, proof.A2, proof.B)
+	e, err := utils.ComputeChallengeByECPoints(n, proof.A1, proof.A2, proof.A3, proof.B)
 	if err != nil {
-		log.Warn("verify pteequality proof failed(compute challenge)", "err", err)
+		log.Warn("verify pte equality proof failed(compute challenge)", "err", err)
 		return false
 	}
 	// check pk1 * z1 == A1 + X1 * e.
@@ -100,6 +112,10 @@ func VerifyPTEqualityProof(params BaseParams, pk1, pk2 *ecdsa.PublicKey, ct *MRT
 	}
 	// check pk2 * z1 == A2 + X2 * e.
 	if !checkTwistedELGamalCTX(new(utils.ECPoint).SetFromPublicKey(pk2), proof.A2, ct.X2, proof.Z1, e) {
+		return false
+	}
+	// check pkauth * z1 = A3 + X3*e.
+	if !checkTwistedELGamalCTX(params.Pub().Copy(), proof.A3, ct.X3, proof.Z1, e) {
 		return false
 	}
 

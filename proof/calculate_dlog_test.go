@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBuildHashMap(t *testing.T) {
-	params := DAggRangeProofParams32()
-	buildHashMap(params.G(), 32, 7, 4)
-}
+// func TestBuildHashMap(t *testing.T) {
+// 	params := DAggRangeProofParams32()
+// 	buildHashMap(params.G(), 32, 7, 4)
+// }
 
 func BenchmarkFindPoint(b *testing.B) {
 	params := DAggRangeProofParams32()

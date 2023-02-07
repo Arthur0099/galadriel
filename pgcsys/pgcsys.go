@@ -2,6 +2,7 @@ package pgcsys
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -10,10 +11,72 @@ import (
 	"github.com/pgc/utils"
 )
 
+type PgcSys interface {
+	proof.AggRangeParams
+	Pub() *utils.ECPoint
+}
+
+type pgcSysParams struct {
+	gv, hv           *utils.GeneratorVector
+	u, g, h, pub     *utils.ECPoint
+	bitsize, aggsize int
+}
+
+func NewPgcSysRandomParams(curve elliptic.Curve, bitsize, aggsize int) PgcSys {
+	arp := pgcSysParams{}
+	arp.gv = utils.NewRandomGeneratorVector(curve, bitsize*aggsize)
+	arp.hv = utils.NewRandomGeneratorVector(curve, bitsize*aggsize)
+	arp.u = utils.NewRandomECPoint(curve)
+	arp.g = utils.NewRandomECPoint(curve)
+	arp.h = utils.NewRandomECPoint(curve)
+	key := proof.MustGenerateKey(&arp)
+	arp.pub = new(utils.ECPoint).SetFromPublicKey(&key.PublicKey)
+	arp.bitsize = bitsize
+	arp.aggsize = aggsize
+
+	return &arp
+}
+
+func (arp *pgcSysParams) Bitsize() int {
+	return arp.bitsize
+}
+
+func (arp *pgcSysParams) Aggsize() int {
+	return arp.aggsize
+}
+
+func (arp *pgcSysParams) Curve() elliptic.Curve {
+	return arp.u.Curve
+}
+
+func (arp *pgcSysParams) GV() *utils.GeneratorVector {
+	return arp.gv
+}
+
+func (arp *pgcSysParams) HV() *utils.GeneratorVector {
+	return arp.hv
+}
+
+func (arp *pgcSysParams) U() *utils.ECPoint {
+	return arp.u
+}
+
+func (arp *pgcSysParams) G() *utils.ECPoint {
+	return arp.g
+}
+
+func (arp *pgcSysParams) H() *utils.ECPoint {
+	return arp.h
+}
+
+func (arp *pgcSysParams) Pub() *utils.ECPoint {
+	return arp.pub
+}
+
 // ConfidentialTx is a tx for pgc transfer system(using aggreate bulletproof).
 type ConfidentialTx struct {
 	nonce, token *big.Int
-	// in real system, this will be on chain and not inculded in ctx.
+	// in real system, this will be on chain and not included in ctx.
 	balance  *proof.CTEncPoint
 	pk1, pk2 *utils.ECPoint
 	transfer *proof.MRTwistedELGamalCTPub
@@ -29,61 +92,67 @@ type ConfidentialTx struct {
 	sigmaDlogeqProof     *proof.DLESigmaProof
 }
 
-type solidityPGCInput struct {
+func (ctx *ConfidentialTx) Transfer() *proof.MRTwistedELGamalCTPub {
+	return ctx.transfer
+}
+
+type SolidityPGCInput struct {
 	// 36
-	points []byte
+	Points []byte
 
-	lr []byte
+	Lr []byte
 
-	scalars [10]*big.Int
+	Scalars [10]*big.Int
 }
 
 // ToSolidityInput formats tx to solidity to verify contract
-func (tx *ConfidentialTx) ToSolidityInput() *solidityPGCInput {
-	input := solidityPGCInput{}
-	input.points = make([]byte, 0)
-	input.points = append(input.points, tx.pk1.Compress()...)
-	input.points = append(input.points, tx.pk2.Compress()...)
-	input.points = append(input.points, tx.transfer.X1.Compress()...)
-	input.points = append(input.points, tx.transfer.X2.Compress()...)
-	input.points = append(input.points, tx.transfer.Y.Compress()...)
-	input.points = append(input.points, tx.sigmaPTEqualityProof.A1.Compress()...)
-	input.points = append(input.points, tx.sigmaPTEqualityProof.A2.Compress()...)
-	input.points = append(input.points, tx.sigmaPTEqualityProof.B.Compress()...)
-	input.points = append(input.points, tx.refreshBalance.X.Compress()...)
-	input.points = append(input.points, tx.refreshBalance.Y.Compress()...)
-	input.points = append(input.points, tx.sigmaCTValidProof.A.Compress()...)
-	input.points = append(input.points, tx.sigmaCTValidProof.B.Compress()...)
-	input.points = append(input.points, tx.sigmaDlogeqProof.A1.Compress()...)
-	input.points = append(input.points, tx.sigmaDlogeqProof.A2.Compress()...)
+func (tx *ConfidentialTx) ToSolidityInput() *SolidityPGCInput {
+	input := SolidityPGCInput{}
+	input.Points = make([]byte, 0)
+	input.Points = append(input.Points, tx.pk1.Compress()...)
+	input.Points = append(input.Points, tx.pk2.Compress()...)
+	input.Points = append(input.Points, tx.transfer.X1.Compress()...)
+	input.Points = append(input.Points, tx.transfer.X2.Compress()...)
+	input.Points = append(input.Points, tx.transfer.X3.Compress()...)
+	input.Points = append(input.Points, tx.transfer.Y.Compress()...)
+	input.Points = append(input.Points, tx.sigmaPTEqualityProof.A1.Compress()...)
+	input.Points = append(input.Points, tx.sigmaPTEqualityProof.A2.Compress()...)
+	input.Points = append(input.Points, tx.sigmaPTEqualityProof.A3.Compress()...)
+	input.Points = append(input.Points, tx.sigmaPTEqualityProof.B.Compress()...)
+	input.Points = append(input.Points, tx.refreshBalance.X.Compress()...)
+	input.Points = append(input.Points, tx.refreshBalance.Y.Compress()...)
+	input.Points = append(input.Points, tx.sigmaCTValidProof.A.Compress()...)
+	input.Points = append(input.Points, tx.sigmaCTValidProof.B.Compress()...)
+	input.Points = append(input.Points, tx.sigmaDlogeqProof.A1.Compress()...)
+	input.Points = append(input.Points, tx.sigmaDlogeqProof.A2.Compress()...)
 	// range proof.
-	input.points = append(input.points, tx.bulletProof.A.Compress()...)
-	input.points = append(input.points, tx.bulletProof.S.Compress()...)
-	input.points = append(input.points, tx.bulletProof.T1.Compress()...)
-	input.points = append(input.points, tx.bulletProof.T2.Compress()...)
+	input.Points = append(input.Points, tx.bulletProof.A.Compress()...)
+	input.Points = append(input.Points, tx.bulletProof.S.Compress()...)
+	input.Points = append(input.Points, tx.bulletProof.T1.Compress()...)
+	input.Points = append(input.Points, tx.bulletProof.T2.Compress()...)
 
 	// L, R
-	input.lr = make([]byte, 0)
+	input.Lr = make([]byte, 0)
 	for i := 0; i < tx.bulletProof.Len(); i++ {
-		input.lr = append(input.lr, tx.bulletProof.Li(i).Compress()...)
+		input.Lr = append(input.Lr, tx.bulletProof.Li(i).Compress()...)
 	}
 	for i := 0; i < tx.bulletProof.Len(); i++ {
-		input.lr = append(input.lr, tx.bulletProof.Ri(i).Compress()...)
+		input.Lr = append(input.Lr, tx.bulletProof.Ri(i).Compress()...)
 	}
 
 	// scalar
-	input.scalars[0] = tx.sigmaPTEqualityProof.Z1
-	input.scalars[1] = tx.sigmaPTEqualityProof.Z2
-	input.scalars[2] = tx.sigmaCTValidProof.Z1
-	input.scalars[3] = tx.sigmaCTValidProof.Z2
-	input.scalars[4] = tx.sigmaDlogeqProof.Z
+	input.Scalars[0] = tx.sigmaPTEqualityProof.Z1
+	input.Scalars[1] = tx.sigmaPTEqualityProof.Z2
+	input.Scalars[2] = tx.sigmaCTValidProof.Z1
+	input.Scalars[3] = tx.sigmaCTValidProof.Z2
+	input.Scalars[4] = tx.sigmaDlogeqProof.Z
 	// range proof.
-	input.scalars[5] = tx.bulletProof.T()
-	input.scalars[6] = tx.bulletProof.TX()
-	input.scalars[7] = tx.bulletProof.U()
+	input.Scalars[5] = tx.bulletProof.T()
+	input.Scalars[6] = tx.bulletProof.TX()
+	input.Scalars[7] = tx.bulletProof.U()
 	// inner proof.
-	input.scalars[8] = tx.bulletProof.AIP()
-	input.scalars[9] = tx.bulletProof.BIP()
+	input.Scalars[8] = tx.bulletProof.AIP()
+	input.Scalars[9] = tx.bulletProof.BIP()
 
 	return &input
 }
@@ -101,6 +170,8 @@ func (tx *ConfidentialTx) Custom() []*big.Int {
 	customs = append(customs, tx.transfer.X1.Y)
 	customs = append(customs, tx.transfer.X2.X)
 	customs = append(customs, tx.transfer.X2.Y)
+	customs = append(customs, tx.transfer.X3.X)
+	customs = append(customs, tx.transfer.X3.Y)
 	customs = append(customs, tx.transfer.Y.X)
 	customs = append(customs, tx.transfer.Y.Y)
 
@@ -108,8 +179,7 @@ func (tx *ConfidentialTx) Custom() []*big.Int {
 }
 
 // CreateConfidentialTx creates confidential transaction to transfer assets from alice to bob.
-// alice和bob的值不要使用負數， 在進行加密時，會自動使用絕對值進行計算。
-func CreateConfidentialTx(params proof.AggRangeParams, alice *Account, bob *ecdsa.PublicKey, v, token *big.Int) (*ConfidentialTx, error) {
+func CreateConfidentialTx(params PgcSys, alice *Account, bob *ecdsa.PublicKey, v, token *big.Int) (*ConfidentialTx, error) {
 	ctx := ConfidentialTx{}
 	alicePublicKey := &alice.sk.PublicKey
 
@@ -164,7 +234,7 @@ func CreateConfidentialTx(params proof.AggRangeParams, alice *Account, bob *ecds
 }
 
 // VerifyConfidentialTx .
-func VerifyConfidentialTx(params proof.AggRangeParams, ctx *ConfidentialTx) bool {
+func VerifyConfidentialTx(params PgcSys, ctx *ConfidentialTx) bool {
 
 	if !proof.VerifyPTEqualityProof(params, ctx.pk1.ToPublicKey(), ctx.pk2.ToPublicKey(), ctx.transfer, ctx.sigmaPTEqualityProof) {
 		log.Warn("verify pte equality proof failed")
@@ -224,7 +294,7 @@ func (btx *BurnETHTx) ToSolidityInput() *burnEHTTxInput {
 }
 
 // CreateBurnETHTx creates tx to burn eth on chain.
-func CreateBurnETHTx(params proof.AggRangeParams, alice *Account, receiver, token common.Address) (*BurnETHTx, error) {
+func CreateBurnETHTx(params PgcSys, alice *Account, receiver, token common.Address) (*BurnETHTx, error) {
 	tx := BurnETHTx{}
 
 	tx.Account = new(utils.ECPoint).SetFromPublicKey(&alice.sk.PublicKey)
@@ -243,6 +313,6 @@ func CreateBurnETHTx(params proof.AggRangeParams, alice *Account, receiver, toke
 }
 
 // VerifyBurnETHTx .
-func VerifyBurnETHTx(params proof.AggRangeParams, nonce *big.Int, receiver common.Address, balance *proof.CTEncPoint, btx *BurnETHTx) bool {
+func VerifyBurnETHTx(params PgcSys, nonce *big.Int, receiver common.Address, balance *proof.CTEncPoint, btx *BurnETHTx) bool {
 	return proof.VerifyEqualProof(params, balance, btx.Amount, btx.Account, btx.Proof, nonce, receiver.Hash().Big())
 }

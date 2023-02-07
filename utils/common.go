@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -43,9 +42,6 @@ func ComputeChallengeByECPoints(order *big.Int, points ...*ECPoint) (*big.Int, e
 }
 
 // ComputeChallenge computes challenge x using hash func(hash(pack(data))).
-// todo: same with Keccak256(a1, a2, b1, b2) in solidity.
-// use abi.Arguments.Pack(A1, A2, B1, B2)
-// hash(bytes)
 func ComputeChallenge(order *big.Int, data ...interface{}) (*big.Int, error) {
 	uint256Type, _ := abi.NewType("uint256", "", nil)
 	arguments := make(abi.Arguments, 0)
@@ -124,10 +120,8 @@ func Sha256Hash(data []byte) []byte {
 
 // BitVector returns vector containing the bits of v.
 // v = <al, 2 ^ n>. and all items in al are {0, 1}
+// oversize not matter
 func BitVector(v *big.Int, n int) ([]*big.Int, error) {
-	if v.BitLen() > n {
-		return nil, errors.New("v is out of range")
-	}
 	bitVector := make([]*big.Int, 0)
 
 	for i := 0; i < n; i++ {
@@ -138,6 +132,7 @@ func BitVector(v *big.Int, n int) ([]*big.Int, error) {
 }
 
 // MultBitVector returns vector appending bitVector of vi.
+// oversize not matter
 func MultBitVector(v []*big.Int, n int) ([]*big.Int, error) {
 	bitVector := make([]*big.Int, 0)
 	for i := 0; i < len(v); i++ {

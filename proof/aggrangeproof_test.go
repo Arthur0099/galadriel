@@ -122,6 +122,12 @@ func TestAggRangeProof(t *testing.T) {
 			v:       []*big.Int{big.NewInt(-1), big.NewInt(-1)},
 			expect:  false,
 		},
+		{
+			curve:   curve.S256(),
+			bitsize: 16,
+			v:       []*big.Int{big.NewInt(1), new(big.Int).Add(utils.BiggestInt(16), utils.One)},
+			expect:  false,
+		},
 	}
 
 	for _, c := range cases {

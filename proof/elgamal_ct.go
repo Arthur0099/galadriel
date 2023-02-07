@@ -4,12 +4,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"io"
 	"math/big"
 
-	log "github.com/inconshreveable/log15"
 	"github.com/pgc/utils"
 )
 
@@ -18,17 +16,20 @@ type CTParams interface {
 	G() *utils.ECPoint
 	Bitsize() int
 	KeyParams
+	Pub() *utils.ECPoint
 }
 
 type ctParams struct {
-	h, g    *utils.ECPoint
-	bitsize int
+	h, g, pub *utils.ECPoint
+	bitsize   int
 }
 
 func newRandomCTParams(curve elliptic.Curve, bitsize int) CTParams {
 	ctp := ctParams{}
 	ctp.h = utils.NewRandomECPoint(curve)
 	ctp.g = utils.NewRandomECPoint(curve)
+	key := MustGenerateKey(&ctp)
+	ctp.pub = new(utils.ECPoint).SetFromPublicKey(&key.PublicKey)
 	ctp.bitsize = bitsize
 
 	return &ctp
@@ -42,36 +43,16 @@ func (ctp *ctParams) H() *utils.ECPoint {
 	return ctp.h
 }
 
+func (ctp *ctParams) Pub() *utils.ECPoint {
+	return ctp.pub
+}
+
 func (ctp *ctParams) Bitsize() int {
 	return ctp.bitsize
 }
 
 func (ctp *ctParams) Curve() elliptic.Curve {
 	return ctp.h.Curve
-}
-
-// KeyParams contains params to genrate key.
-type KeyParams interface {
-	H() *utils.ECPoint
-	Curve() elliptic.Curve
-}
-
-type keyParams struct {
-	h *utils.ECPoint
-}
-
-func (k *keyParams) H() *utils.ECPoint {
-	return k.h
-}
-
-func (k *keyParams) Curve() elliptic.Curve {
-	return k.h.Curve
-}
-
-func newRandomKeyParams(curve elliptic.Curve) KeyParams {
-	h := utils.NewRandomECPoint(curve)
-
-	return &keyParams{h}
 }
 
 // CTEncPoint respresents encrypted ct tx point on curve.
@@ -98,26 +79,10 @@ func (c *CTEncPoint) Copy() *CTEncPoint {
 	return &ecPoints
 }
 
-// PublicKey represents a public key used in twisted elgamal.
-type PublicKey struct {
-	elliptic.Curve
-
-	// Point on curve.
-	X, Y *big.Int
-}
-
-// PrivateKey represents a private key used in twisted elgamal.
-type PrivateKey struct {
-	// sk
-	D *big.Int
-
-	PublicKey
-}
-
 // MRTwistedELGamalCTPub represent public points in MRTwistedELGamalCT tx.
 type MRTwistedELGamalCTPub struct {
-	// X1=pk1*r; X2=pk2*r.
-	X1, X2 *utils.ECPoint
+	// X1=pk1*r; X2=pk2*r; X3=pk3*r.
+	X1, X2, X3 *utils.ECPoint
 	// Y = g*r + h*m.
 	Y *utils.ECPoint
 }
@@ -203,95 +168,6 @@ func randFieldElement(c elliptic.Curve, rand io.Reader) (k *big.Int, err error) 
 	return
 }
 
-// MustGenerateKey generates a key pair and panic if err.
-// Warn: test purpose only.
-func MustGenerateKey(params KeyParams) *ecdsa.PrivateKey {
-	key, err := GenerateKey(params)
-	if err != nil {
-		panic(err)
-	}
-
-	return key
-}
-
-// GenerateKey generates key pair.
-// Warn: The h point from global params is used for generating key pair, not original
-// g base point from curve.
-func GenerateKey(params KeyParams) (priv *ecdsa.PrivateKey, err error) {
-	curve := params.Curve()
-	h := params.H()
-
-	k, err := randFieldElement(curve, rand.Reader)
-	if err != nil {
-		return
-	}
-
-	priv = new(ecdsa.PrivateKey)
-	priv.PublicKey.Curve = curve
-	priv.D = k
-	// Warng: x, y == h * sk.
-	priv.PublicKey.X, priv.PublicKey.Y = curve.ScalarMult(h.X, h.Y, k.Bytes())
-	return
-}
-
-// HexToKey returns key pair by hex.
-func HexToKey(hexKey string, params KeyParams) (priv *ecdsa.PrivateKey, err error) {
-	b, err := hex.DecodeString(hexKey)
-	if err != nil {
-		return nil, err
-	}
-
-	h := params.H()
-	priv = new(ecdsa.PrivateKey)
-	priv.PublicKey.Curve = params.Curve()
-	priv.D = new(big.Int).SetBytes(b)
-	priv.PublicKey.X, priv.PublicKey.Y = params.Curve().ScalarMult(h.X, h.Y, b)
-	return
-}
-
-// EncryptOnChain encrypts msg with random 0.
-func EncryptOnChain(params CTParams, pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
-	msgBit := new(big.Int).SetBytes(msg)
-
-	// todo: remove/ add
-	// if msgBit.BitLen() > params.BitSizeLimit() {
-	// 	return nil, errors.New("msg reach size limit")
-	// }
-
-	// Create ct instance.
-	ct := new(TwistedELGamalCT)
-	ct.X = utils.NewEmptyECPoint(pk.Curve)
-	ct.Y = utils.NewEmptyECPoint(pk.Curve)
-
-	// set curve
-	curve := pk.Curve
-
-	// set random 0.
-	r := new(big.Int).SetUint64(0)
-
-	// for sigma proof purpose.
-	ct.R = new(big.Int).Set(r)
-	ct.EncMsg = make([]byte, len(msg))
-	copy(ct.EncMsg, msg)
-
-	// compute pk * r.(pk ^ r)
-	ct.X.SetFromPublicKey(pk)
-	ct.X.ScalarMult(ct.X, r)
-
-	// compute g * m.(g ^ m)
-	g := params.G()
-	ct.Y.ScalarMult(g, msgBit)
-	log.Debug("encrypt msg(g^m)", "x", ct.Y.X, "y", ct.Y.Y)
-	// compute h * r.(h ^ r)
-	h := params.H()
-	s2X, s2Y := curve.ScalarMult(h.X, h.Y, r.Bytes())
-	// compute g * m + h * r.
-	ct.Y.Add(ct.Y, utils.NewECPoint(s2X, s2Y, curve))
-
-	return ct, nil
-
-}
-
 // EncryptTransfer encrypts msg by two different pk but with same random.
 func EncryptTransfer(params CTParams, sender, receiver *ecdsa.PublicKey, msg []byte) (*MRTwistedELGamalCT, error) {
 	curve := sender.Curve
@@ -308,8 +184,12 @@ func EncryptTransfer(params CTParams, sender, receiver *ecdsa.PublicKey, msg []b
 	if err != nil {
 		return nil, err
 	}
+	twAuth, err := EncryptWithRandom(params, params.Pub().ToPublicKey(), msg, r)
+	if err != nil {
+		return nil, err
+	}
 
-	if !twReceiver.Y.Equal(twSender.Y) {
+	if !twReceiver.Y.Equal(twSender.Y) || !twReceiver.Y.Equal(twAuth.Y) {
 		return nil, errors.New("twisted elgamal y point not equal")
 	}
 
@@ -317,6 +197,7 @@ func EncryptTransfer(params CTParams, sender, receiver *ecdsa.PublicKey, msg []b
 		MRTwistedELGamalCTPub: MRTwistedELGamalCTPub{
 			X1: twSender.X,
 			X2: twReceiver.X,
+			X3: twAuth.X,
 			Y:  twSender.Y,
 		},
 		R:      r,

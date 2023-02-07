@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/pgc/curve"
-	"github.com/pgc/proof"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +17,7 @@ func TestPGCSystem(t *testing.T) {
 
 	for _, curve := range curves {
 		for _, bitsize := range bitsizes {
-			params := proof.NewRandomAggRangeParams(curve, bitsize, 2)
+			params := NewPgcSysRandomParams(curve, bitsize, 2)
 
 			cases := []struct {
 				aliceAmount *big.Int
@@ -55,7 +54,7 @@ func TestPGCSystem(t *testing.T) {
 
 }
 
-func testpgcctx(t *testing.T, params proof.AggRangeParams, senderAmount, receiver, amount *big.Int, expect bool) {
+func testpgcctx(t *testing.T, params PgcSys, senderAmount, receiver, amount *big.Int, expect bool) {
 	alice := CreateTestAccount(params, "alice", senderAmount)
 	bob := CreateTestAccount(params, "bob", receiver)
 
@@ -76,7 +75,6 @@ func BenchmarkCreateConfidentialTxBN256(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
-
 }
 
 func BenchmarkVerifyConfidentialTxBN256(b *testing.B) {
@@ -95,13 +93,13 @@ func BenchmarkVerifyConfidentialTxBN256(b *testing.B) {
 	}
 }
 
-func getTestConfig() (proof.AggRangeParams, *Account, *Account, *big.Int) {
+func getTestConfig() (PgcSys, *Account, *Account, *big.Int) {
 	senderAmount := new(big.Int).SetUint64(10000)
 	receiver := new(big.Int).SetUint64(20000)
 	amount := new(big.Int).SetUint64(9000)
 	curve := curve.BN256()
 	bitsize := 32
-	params := proof.NewRandomAggRangeParams(curve, bitsize, 2)
+	params := NewPgcSysRandomParams(curve, bitsize, 2)
 
 	alice := CreateTestAccount(params, "alice", senderAmount)
 	bob := CreateTestAccount(params, "bob", receiver)

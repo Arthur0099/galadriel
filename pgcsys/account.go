@@ -48,3 +48,11 @@ func (a *Account) UpdateBalance(nonce *big.Int, ct [4]*big.Int) {
 	balance := proof.Decrypt(a.params, a.sk, a.balance)
 	a.m = new(big.Int).SetBytes(balance)
 }
+
+func (a *Account) M() *big.Int {
+	return a.m
+}
+
+func (a *Account) Priv() *ecdsa.PrivateKey {
+	return a.sk
+}

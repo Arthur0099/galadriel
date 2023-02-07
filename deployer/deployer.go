@@ -20,12 +20,12 @@ import (
 )
 
 // DeployParams deploy param contract.
-func DeployParams(auth *bind.TransactOpts, ethclient *ethclient.Client) (common.Address, *publicparams.Publicparams) {
+func DeployParams(auth *bind.TransactOpts, ethclient *ethclient.Client, pkx, pky *big.Int) (common.Address, *publicparams.Publicparams) {
 	if err := client.SetNonce(auth, ethclient); err != nil {
 		panic(err)
 	}
 
-	addr, tx, con, err := publicparams.DeployPublicparams(auth, ethclient)
+	addr, tx, con, err := publicparams.DeployPublicparams(auth, ethclient, pkx, pky)
 	if err != nil {
 		panic(err)
 	}
@@ -139,10 +139,10 @@ func DeployPGCMain(auth *bind.TransactOpts, ethclient *ethclient.Client, params,
 }
 
 // DeployPGCSystemAllContract deploys all contract for pgc system.
-func DeployPGCSystemAllContract(auth *bind.TransactOpts, ethclient *ethclient.Client) ([]common.Address, *pgcm.Pgc) {
+func DeployPGCSystemAllContract(auth *bind.TransactOpts, ethclient *ethclient.Client, pkx, pky *big.Int) ([]common.Address, *pgcm.Pgc) {
 	addrs := make([]common.Address, 0)
 
-	params, _ := DeployParams(auth, ethclient)
+	params, _ := DeployParams(auth, ethclient, pkx, pky)
 	addrs = append(addrs, params)
 
 	tokenConverter, _ := DeployTokenConverter(auth, ethclient)

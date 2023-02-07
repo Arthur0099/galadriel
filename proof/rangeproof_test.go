@@ -91,6 +91,12 @@ func TestRangeProof(t *testing.T) {
 			v:       new(big.Int).SetInt64(-1),
 			expect:  false,
 		},
+		{
+			curve:   curve.S256(),
+			bitsize: 16,
+			v:       new(big.Int).Add(utils.BiggestInt(16), utils.One),
+			expect:  false,
+		},
 	}
 
 	for _, c := range cases {
