@@ -3,6 +3,7 @@ package proof
 import (
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/json"
 	"math/big"
 
 	log "github.com/inconshreveable/log15"
@@ -114,6 +115,29 @@ type RangeProof struct {
 	t, tx, u *big.Int
 
 	ipProof *IPProof
+}
+
+func (rpf *RangeProof) MarshalJSON() ([]byte, error) {
+	out := struct {
+		A, S *utils.ECPoint
+
+		T1, T2 *utils.ECPoint
+
+		T, Tx, U string
+
+		IpProof *IPProof
+	}{
+		A:       rpf.A,
+		S:       rpf.S,
+		T1:      rpf.T1,
+		T2:      rpf.T2,
+		T:       rpf.t.String(),
+		Tx:      rpf.tx.String(),
+		U:       rpf.u.String(),
+		IpProof: rpf.ipProof,
+	}
+
+	return json.Marshal(&out)
 }
 
 type rangeProofInput struct {

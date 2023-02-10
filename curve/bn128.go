@@ -9,6 +9,10 @@ import (
 	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 )
 
+const (
+	bn256Name = "BN256"
+)
+
 // Marshaler can marshal a point to a big.int.
 type Marshaler interface {
 	Marshal(x, y *big.Int) []byte
@@ -38,6 +42,7 @@ func (bn128 *BN128) Params() *elliptic.CurveParams {
 	params.Gy = new(big.Int).SetUint64(2)
 	params.B = new(big.Int).SetUint64(3)
 	params.BitSize = 256
+	params.Name = bn256Name
 
 	return params
 }

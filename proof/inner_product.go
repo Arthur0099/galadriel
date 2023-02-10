@@ -2,6 +2,7 @@ package proof
 
 import (
 	"crypto/elliptic"
+	"encoding/json"
 	"errors"
 	"math/big"
 
@@ -26,6 +27,20 @@ type ipparams struct {
 	u      *utils.ECPoint
 }
 
+// MarshalJSON defines a custom way to marshal.
+func (ipp *ipparams) MarshalJSON() ([]byte, error) {
+	newJSON := struct {
+		GV, HV *utils.GeneratorVector
+		U      *utils.ECPoint
+	}{
+		GV: ipp.gv,
+		HV: ipp.hv,
+		U:  ipp.u,
+	}
+
+	return json.Marshal(&newJSON)
+}
+
 // NewIPParams returns a new instance of ipprams.
 func NewIPParams(gv, hv *utils.GeneratorVector, u *utils.ECPoint) IPParams {
 	return &ipparams{
@@ -35,7 +50,8 @@ func NewIPParams(gv, hv *utils.GeneratorVector, u *utils.ECPoint) IPParams {
 	}
 }
 
-func newRandomParams(curve elliptic.Curve, size int) *ipparams {
+// NewInnerProductRandomParams generates random params for test purpose
+func NewInnerProductRandomParams(curve elliptic.Curve, size int) IPParams {
 	params := ipparams{}
 	params.gv = utils.NewRandomGeneratorVector(curve, size)
 	params.hv = utils.NewRandomGeneratorVector(curve, size)
@@ -69,6 +85,50 @@ type IPProofInput struct {
 	a, b *big.Int
 }
 
+// MarshalJSON defines a custom way to marshal.
+func (ip *IPProof) MarshalJSON() ([]byte, error) {
+	newJSON := struct {
+		L, R []*utils.ECPoint
+		A, B string
+	}{
+		L: ip.l,
+		R: ip.r,
+		A: ip.a.String(),
+		B: ip.b.String(),
+	}
+
+	return json.Marshal(&newJSON)
+}
+
+// UnmarshalJSON defines a custom way to unmarshal
+func (ip *IPProof) UnmarshalJSON(bz []byte) error {
+	var data struct {
+		L, R []*utils.ECPoint
+		A, B string
+	}
+
+	if err := json.Unmarshal(bz, &data); err != nil {
+		return err
+	}
+
+	a, ok := new(big.Int).SetString(data.A, 10)
+	if !ok {
+		return errors.New("Invalid a in ip proof")
+	}
+	b, ok := new(big.Int).SetString(data.B, 10)
+	if !ok {
+		return errors.New("Invalid b in ip proof")
+	}
+
+	*ip = IPProof{
+		l: data.L,
+		r: data.R,
+		a: a,
+		b: b,
+	}
+	return nil
+}
+
 // ToSolidityInput change format to solidity contract input.
 func (ipproof *IPProof) ToSolidityInput() *IPProofInput {
 	input := IPProofInput{}
@@ -87,6 +147,18 @@ func (ipproof *IPProof) ToSolidityInput() *IPProofInput {
 	input.b = new(big.Int).Set(ipproof.b)
 
 	return &input
+}
+
+// NewInnerProductRandomCommitments generates random commitments for test
+func NewInnerProductRandomCommitments(params IPParams, n *big.Int, size int) (*utils.ECPoint, *big.Int, *utils.FieldVector, *utils.FieldVector) {
+	a := utils.NewRandomFieldVector(n, size)
+	b := utils.NewRandomFieldVector(n, size)
+	c := a.InnerProduct(b)
+	pa := params.GV().SubVector(0, size).Commit(a.GetVector())
+	pb := params.HV().SubVector(0, size).Commit(b.GetVector())
+	p := new(utils.ECPoint).Add(pa, pb)
+
+	return p, c, a, b
 }
 
 // NewIPProof creates instance of inner product proof.

@@ -1,6 +1,8 @@
 # PGC
 
-PGC(Pretty Good Confidential Transaction System with Accountability)是一种基于账户体现的可监管加密交易系统。普通用户可以使用该系统进行隐私交易转账，拥有`Global Key`的机构可以对所有交易进行监管，同时本系统还提供诸如反洗钱等（线性升级策略）审计功能。
+PGC(Pretty Good Confidential Transaction System with Accountability)是一种基于账户实现的可监管加密交易系统，支持匿名性、机密性（隐藏交易金额）和可监管性。
+普通用户可以使用该系统进行数字货币的隐私交易转账而不用担心信息被泄露，
+监管方（拥有`Global Key`的机构）可以对所有交易进行监管、审计。同时，本系统还支持反洗钱、交易金额范围等（线性审计策略）策略审计功能，交易用户可向任何人证明一笔或多笔交易符合上述策略。
 
 ## 部署测试
 

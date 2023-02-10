@@ -5,7 +5,10 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"math/big"
+
+	"github.com/pgc/curve"
 )
 
 // ECPoint represents a point on elliptic curve.
@@ -25,14 +28,51 @@ func (ec *ECPoint) checkNil() {
 // MarshalJSON defines custom way to marshal json.
 func (ec *ECPoint) MarshalJSON() ([]byte, error) {
 	newJSON := struct {
-		X string
-		Y string
+		X     string
+		Y     string
+		Curve string
 	}{
-		X: ec.X.String(),
-		Y: ec.Y.String(),
+		X:     ec.X.String(),
+		Y:     ec.Y.String(),
+		Curve: ec.Curve.Params().Name,
 	}
 
 	return json.Marshal(&newJSON)
+}
+
+// UnmarshalJSON defines custom way to unmarshal json.
+func (ec *ECPoint) UnmarshalJSON(bz []byte) error {
+	var data struct {
+		X     string
+		Y     string
+		Curve string
+	}
+
+	if err := json.Unmarshal(bz, &data); err != nil {
+		return err
+	}
+
+	cv, err := curve.GetCurve(data.Curve)
+	if err != nil {
+		return err
+	}
+
+	x, ok := new(big.Int).SetString(data.X, 10)
+	if !ok {
+		return errors.New("Invalid ec point: x incorrect")
+	}
+	y, ok := new(big.Int).SetString(data.Y, 10)
+	if !ok {
+		return errors.New("Invalid ec point: y incorrect")
+	}
+
+	*ec = ECPoint{
+		X:     x,
+		Y:     y,
+		Curve: cv,
+	}
+
+	return nil
 }
 
 // NewECPoint returns instance of ec point.

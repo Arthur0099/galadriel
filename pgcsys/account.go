@@ -29,7 +29,7 @@ func CreateTestAccount(params proof.CTParams, name string, balance *big.Int) *Ac
 	key := proof.MustGenerateKey(params)
 
 	a.sk = key
-	ct, err := proof.Encrypt(params, &a.sk.PublicKey, balance.Bytes())
+	ct, err := proof.EncryptOnChain(params, &a.sk.PublicKey, balance.Bytes())
 	if err != nil {
 		panic(err)
 	}
@@ -38,10 +38,23 @@ func CreateTestAccount(params proof.CTParams, name string, balance *big.Int) *Ac
 	return &a
 }
 
+func (a *Account) Balance() *proof.CTEncPoint {
+	return a.balance
+}
+
 // UpdateBalance updates user's encrypted balance and nonce.
 func (a *Account) UpdateBalance(nonce *big.Int, ct [4]*big.Int) {
 	a.balance.X = utils.NewECPoint(ct[0], ct[1], a.sk.Curve)
 	a.balance.Y = utils.NewECPoint(ct[2], ct[3], a.sk.Curve)
+	a.nonce = nonce.Uint64()
+
+	// decrypt balance
+	balance := proof.Decrypt(a.params, a.sk, a.balance)
+	a.m = new(big.Int).SetBytes(balance)
+}
+
+func (a *Account) UpdateBalanceInter(nonce *big.Int, nbalace *proof.CTEncPoint) {
+	a.balance = nbalace
 	a.nonce = nonce.Uint64()
 
 	// decrypt balance

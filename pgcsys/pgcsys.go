@@ -3,6 +3,8 @@ package pgcsys
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"encoding/hex"
+	"encoding/json"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -73,6 +75,51 @@ func (arp *pgcSysParams) Pub() *utils.ECPoint {
 	return arp.pub
 }
 
+// MarshalJSON define custom way to marshal json
+func (arp *pgcSysParams) MarshalJSON() ([]byte, error) {
+	newJSON := struct {
+		GV, HV           *utils.GeneratorVector
+		U, G, H, Pub     *utils.ECPoint
+		Bitsize, Aggsize int
+	}{
+		GV:      arp.gv,
+		HV:      arp.hv,
+		U:       arp.u,
+		G:       arp.g,
+		H:       arp.h,
+		Pub:     arp.pub,
+		Bitsize: arp.bitsize,
+		Aggsize: arp.aggsize,
+	}
+
+	return json.Marshal(&newJSON)
+}
+
+// UnmarshalJSON defines custom way to unmarshal
+func (arp *pgcSysParams) UnmarshalJSON(bz []byte) error {
+	var data struct {
+		GV, HV           *utils.GeneratorVector
+		U, G, H, Pub     *utils.ECPoint
+		Bitsize, Aggsize int
+	}
+
+	if err := json.Unmarshal(bz, &data); err != nil {
+		return err
+	}
+
+	*arp = pgcSysParams{
+		gv:      data.GV,
+		hv:      data.HV,
+		u:       data.U,
+		g:       data.G,
+		h:       data.H,
+		pub:     data.Pub,
+		bitsize: data.Bitsize,
+		aggsize: data.Aggsize,
+	}
+	return nil
+}
+
 // ConfidentialTx is a tx for pgc transfer system(using aggreate bulletproof).
 type ConfidentialTx struct {
 	nonce, token *big.Int
@@ -96,13 +143,41 @@ func (ctx *ConfidentialTx) Transfer() *proof.MRTwistedELGamalCTPub {
 	return ctx.transfer
 }
 
+func (ctx *ConfidentialTx) RefreshBalance() *proof.CTEncPoint {
+	return ctx.refreshBalance
+}
+
+func (ctx *ConfidentialTx) AggRangeProof() *proof.AggRangeProof {
+	return ctx.bulletProof
+}
+
 type SolidityPGCInput struct {
-	// 36
 	Points []byte
 
 	Lr []byte
 
 	Scalars [10]*big.Int
+}
+
+func (sin *SolidityPGCInput) MarshalJSON() ([]byte, error) {
+	out := struct {
+		Points string
+
+		Lr string
+
+		Scalars []string
+	}{
+		Points: "0x" + hex.EncodeToString(sin.Points),
+		Lr:     "0x" + hex.EncodeToString(sin.Lr),
+	}
+
+	s := make([]string, 0)
+	for _, v := range sin.Scalars {
+		s = append(s, v.String())
+	}
+	out.Scalars = s
+
+	return json.Marshal(&out)
 }
 
 // ToSolidityInput formats tx to solidity to verify contract
@@ -222,6 +297,7 @@ func CreateConfidentialTx(params PgcSys, alice *Account, bob *ecdsa.PublicKey, v
 	vlist := make([]*big.Int, 0)
 	vlist = append(vlist, new(big.Int).SetBytes(transferEnc.EncMsg))
 	vlist = append(vlist, new(big.Int).SetBytes(refreshBalanceCT.EncMsg))
+
 	random := make([]*big.Int, 0)
 	random = append(random, transferEnc.R)
 	random = append(random, refreshBalanceCT.R)
@@ -273,19 +349,35 @@ type BurnETHTx struct {
 	Receiver common.Address
 }
 
-type burnEHTTxInput struct {
+type BurnEHTTxInput struct {
 	Receiver common.Address
 	Amount   *big.Int
 	Points   []byte
 	Z        *big.Int
 }
 
-func (btx *BurnETHTx) ToSolidityInput() *burnEHTTxInput {
+func (bin *BurnEHTTxInput) MarshalJSON() ([]byte, error) {
+	out := struct {
+		Receiver common.Address
+		Amount   string
+		Points   string
+		Z        string
+	}{
+		Receiver: bin.Receiver,
+		Points:   "0x" + hex.EncodeToString(bin.Points),
+		Amount:   bin.Amount.String(),
+		Z:        bin.Z.String(),
+	}
+
+	return json.Marshal(&out)
+}
+
+func (btx *BurnETHTx) ToSolidityInput() *BurnEHTTxInput {
 	ps := make([]byte, 0)
 	ps = append(ps, btx.Account.Compress()...)
 	ps = append(ps, btx.Proof.A1.Compress()...)
 	ps = append(ps, btx.Proof.A2.Compress()...)
-	return &burnEHTTxInput{
+	return &BurnEHTTxInput{
 		Receiver: btx.Receiver,
 		Amount:   new(big.Int).Set(btx.Amount),
 		Points:   ps,
@@ -299,6 +391,7 @@ func CreateBurnETHTx(params PgcSys, alice *Account, receiver, token common.Addre
 
 	tx.Account = new(utils.ECPoint).SetFromPublicKey(&alice.sk.PublicKey)
 	tx.Amount = new(big.Int).Set(alice.m)
+	tx.Receiver = receiver
 
 	// generate proof to prove alice has the sk and the amount is indeed same with value encrypted.
 	// alice's encrypted balance should be right set.
@@ -313,6 +406,6 @@ func CreateBurnETHTx(params PgcSys, alice *Account, receiver, token common.Addre
 }
 
 // VerifyBurnETHTx .
-func VerifyBurnETHTx(params PgcSys, nonce *big.Int, receiver common.Address, balance *proof.CTEncPoint, btx *BurnETHTx) bool {
-	return proof.VerifyEqualProof(params, balance, btx.Amount, btx.Account, btx.Proof, nonce, receiver.Hash().Big())
+func VerifyBurnETHTx(params PgcSys, nonce *big.Int, balance *proof.CTEncPoint, btx *BurnETHTx) bool {
+	return proof.VerifyEqualProof(params, balance, btx.Amount, btx.Account, btx.Proof, nonce, btx.Receiver.Hash().Big())
 }

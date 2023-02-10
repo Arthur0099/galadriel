@@ -3,6 +3,8 @@ package utils
 import (
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -216,6 +218,37 @@ func (gv *GeneratorVector) AddGeneratorVector(other *GeneratorVector) *Generator
 	}
 
 	return NewGeneratorVector(newVector)
+}
+
+// MarshalJSON defines a custom way to marshal.
+func (gv *GeneratorVector) MarshalJSON() ([]byte, error) {
+	newJSON := struct {
+		Vec []*ECPoint
+	}{
+		Vec: gv.vector,
+	}
+
+	return json.Marshal(&newJSON)
+}
+
+// UnmarshalJSON defines a custom way to unmarshal
+func (gv *GeneratorVector) UnmarshalJSON(bz []byte) error {
+	var data struct {
+		Vec []*ECPoint
+	}
+
+	if err := json.Unmarshal(bz, &data); err != nil {
+		return err
+	}
+	if len(data.Vec) == 0 {
+		return errors.New("empty vector")
+	}
+
+	*gv = GeneratorVector{
+		vector: data.Vec,
+		Curve:  data.Vec[0].Curve,
+	}
+	return nil
 }
 
 // Print print all info of generator vector(test purpose)

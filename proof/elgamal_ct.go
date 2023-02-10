@@ -70,6 +70,15 @@ func (c *CTEncPoint) Sub(first, second *CTEncPoint) *CTEncPoint {
 	return &ecPoints
 }
 
+// Add .
+func (c *CTEncPoint) Add(first, second *CTEncPoint) *CTEncPoint {
+	ecPoints := CTEncPoint{}
+
+	ecPoints.X = new(utils.ECPoint).Add(first.X, second.X)
+	ecPoints.Y = new(utils.ECPoint).Add(first.Y, second.Y)
+	return &ecPoints
+}
+
 // Copy .
 func (c *CTEncPoint) Copy() *CTEncPoint {
 	ecPoints := CTEncPoint{}
@@ -90,6 +99,13 @@ type MRTwistedELGamalCTPub struct {
 func (mrp *MRTwistedELGamalCTPub) First() *CTEncPoint {
 	return &CTEncPoint{
 		X: mrp.X1,
+		Y: mrp.Y,
+	}
+}
+
+func (mrp *MRTwistedELGamalCTPub) Second() *CTEncPoint {
+	return &CTEncPoint{
+		X: mrp.X2,
 		Y: mrp.Y,
 	}
 }
@@ -215,6 +231,11 @@ func Encrypt(params CTParams, pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalC
 	}
 
 	return EncryptWithRandom(params, pk, msg, r)
+}
+
+// EncryptOnChain encrypts msg with determine random 0.
+func EncryptOnChain(params CTParams, pk *ecdsa.PublicKey, msg []byte) (*TwistedELGamalCT, error) {
+	return EncryptWithRandom(params, pk, msg, big.NewInt(0))
 }
 
 // EncryptWithRandom encrypts msg in twisted elgamal way.

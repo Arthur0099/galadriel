@@ -63,20 +63,9 @@ func TestInnerProduct(t *testing.T) {
 
 }
 
-func newRandomcommitments(params IPParams, n *big.Int, size int) (*utils.ECPoint, *big.Int, *utils.FieldVector, *utils.FieldVector) {
-	a := utils.NewRandomFieldVector(n, size)
-	b := utils.NewRandomFieldVector(n, size)
-	c := a.InnerProduct(b)
-	pa := params.GV().Commit(a.GetVector())
-	pb := params.HV().Commit(b.GetVector())
-	p := new(utils.ECPoint).Add(pa, pb)
-
-	return p, c, a, b
-}
-
 func testInnerProduct(t *testing.T, curve elliptic.Curve, bitsize int) {
-	params := newRandomParams(curve, bitsize)
-	p, c, a, b := newRandomcommitments(params, curve.Params().N, bitsize)
+	params := NewInnerProductRandomParams(curve, bitsize)
+	p, c, a, b := NewInnerProductRandomCommitments(params, curve.Params().N, bitsize)
 
 	proof, err := GenIPProof(params, p, c, a, b)
 	require.Nil(t, err, "generate inner product failed")
@@ -117,8 +106,8 @@ type verifyFunc func(params IPParams, p *utils.ECPoint, c *big.Int, proof *IPPro
 
 func benchmarkVerify(b *testing.B, curve elliptic.Curve, bitsize int, vf verifyFunc) {
 	b.StopTimer()
-	params := newRandomParams(curve, bitsize)
-	p, c, a, pb := newRandomcommitments(params, curve.Params().N, bitsize)
+	params := NewInnerProductRandomParams(curve, bitsize)
+	p, c, a, pb := NewInnerProductRandomCommitments(params, curve.Params().N, bitsize)
 	proof, err := GenIPProof(params, p, c, a, pb)
 	if err != nil {
 		b.Fatal("generate proof failed")
@@ -133,8 +122,8 @@ func benchmarkVerify(b *testing.B, curve elliptic.Curve, bitsize int, vf verifyF
 
 func benchmarkTest(b *testing.B, curve elliptic.Curve, bitsize int) {
 	b.StopTimer()
-	params := newRandomParams(curve, bitsize)
-	p, c, a, pb := newRandomcommitments(params, curve.Params().N, bitsize)
+	params := NewInnerProductRandomParams(curve, bitsize)
+	p, c, a, pb := NewInnerProductRandomCommitments(params, curve.Params().N, bitsize)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		_, err := GenIPProof(params, p, c, a, pb)

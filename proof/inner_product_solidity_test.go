@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/elliptic"
 	"math/big"
+	"os"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -19,9 +20,8 @@ import (
 func TestInnerProductContractVerify(t *testing.T) {
 	cv := curve.BN256()
 
-	rpcclient := client.GetLocalRPC()
 	ethclient := client.GetLocal()
-	auth := rpcclient.GetAccountWithETH(ethclient)
+	auth := client.GetAccountWithKey(os.Getenv("DeployerKey"), ethclient)
 	_, ipcon := deployer.DeployInnerProduct(auth, ethclient)
 
 	cases := []int{2, 4, 8, 16, 32, 64}
@@ -31,8 +31,8 @@ func TestInnerProductContractVerify(t *testing.T) {
 }
 
 func testInnerProductContractVerify(t *testing.T, cv elliptic.Curve, bitsize int, ipcon *ipverifier.Ipverifier) {
-	ipparams := newRandomParams(cv, bitsize)
-	p, c, a, b := newRandomcommitments(ipparams, cv.Params().N, bitsize)
+	ipparams := NewInnerProductRandomParams(cv, bitsize)
+	p, c, a, b := NewInnerProductRandomCommitments(ipparams, cv.Params().N, bitsize)
 
 	proof, err := GenIPProof(ipparams, p, c, a, b)
 	require.Nil(t, err, "generate inner product failed")
