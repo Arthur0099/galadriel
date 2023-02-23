@@ -25,7 +25,7 @@ func BenchmarkFindPoint(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		dec := ShanksDlog(h, dst, 32, 7)
+		dec, _ := ShanksDlog(h, dst, 32, 7)
 		assert.Equal(b, r, dec)
 	}
 }

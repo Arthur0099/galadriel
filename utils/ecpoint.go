@@ -186,6 +186,54 @@ func (ec *ECPoint) Compress() []byte {
 	return compressed
 }
 
+func DecompressPointBytes(cv elliptic.Curve, data []byte) (*ECPoint, error) {
+	if len(data) != 33 {
+		return nil, errors.New("invalid point len, expect 33")
+	}
+
+	ybit := data[0]&0x1 == 1
+	x := new(big.Int).SetBytes(data[1:])
+	return DecompressPoint(cv, x, ybit)
+}
+
+// DecompressPoint decompress point
+func DecompressPoint(cv elliptic.Curve, x *big.Int, ybit bool) (*ECPoint, error) {
+	// y^2 = x^3 + ax + b
+	x3 := new(big.Int).Mul(x, x)
+	x3.Mul(x3, x)
+
+	a, err := curve.GetCurveA(cv.Params().Name)
+	if err != nil {
+		return nil, err
+	}
+	ax := new(big.Int).Mul(a, x)
+
+	x3.Add(x3, ax)
+	x3.Add(x3, cv.Params().B)
+	x3.Mod(x3, cv.Params().P)
+
+	// get y
+	y := new(big.Int).ModSqrt(x3, cv.Params().P)
+	if isOdd(y) != ybit {
+		y.Sub(cv.Params().P, y)
+	}
+	// check
+	{
+		y2 := new(big.Int).Mul(y, y)
+		y2.Mod(y2, cv.Params().P)
+		if x3.Cmp(y2) != 0 {
+			return new(ECPoint), errors.New("invalid point, not on curve")
+		}
+	}
+
+	pk := new(ECPoint)
+	pk.Curve = cv
+	pk.X = x
+	pk.Y = y
+
+	return pk, nil
+}
+
 // ScalarMult returns ec * scalar.
 // set ec to new point.
 func (ec *ECPoint) ScalarMult(base *ECPoint, k *big.Int) *ECPoint {
@@ -237,7 +285,7 @@ func (ec *ECPoint) Copy() *ECPoint {
 // Equal check two point equal or not.
 // return res.
 func (ec *ECPoint) Equal(other *ECPoint) bool {
-	return ec.X.Cmp(other.X) == 0 && ec.Y.Cmp(other.Y) == 0
+	return ec.X.Cmp(other.X) == 0 && ec.Y.Cmp(other.Y) == 0 && ec.Curve.Params().Name == other.Curve.Params().Name
 }
 
 //
@@ -245,4 +293,8 @@ func (ec *ECPoint) Apply(other *ECPoint) {
 	ec.X = other.X
 	ec.Y = other.Y
 	ec.Curve = other.Curve
+}
+
+func isOdd(a *big.Int) bool {
+	return a.Bit(0) == 1
 }

@@ -19,6 +19,22 @@ type Account struct {
 	params proof.CTParams
 }
 
+func NewAccount(name string,
+	sk *ecdsa.PrivateKey,
+	balance *proof.CTEncPoint,
+	m *big.Int,
+	params proof.CTParams,
+	nonce uint64) *Account {
+	return &Account{
+		name:    name,
+		sk:      sk,
+		balance: balance,
+		m:       m,
+		params:  params,
+		nonce:   nonce,
+	}
+}
+
 // CreateTestAccount creates account for test pupose.
 func CreateTestAccount(params proof.CTParams, name string, balance *big.Int) *Account {
 	a := Account{}
@@ -49,7 +65,7 @@ func (a *Account) UpdateBalance(nonce *big.Int, ct [4]*big.Int) {
 	a.nonce = nonce.Uint64()
 
 	// decrypt balance
-	balance := proof.Decrypt(a.params, a.sk, a.balance)
+	balance, _ := proof.Decrypt(a.params, a.sk, a.balance)
 	a.m = new(big.Int).SetBytes(balance)
 }
 
@@ -58,7 +74,7 @@ func (a *Account) UpdateBalanceInter(nonce *big.Int, nbalace *proof.CTEncPoint) 
 	a.nonce = nonce.Uint64()
 
 	// decrypt balance
-	balance := proof.Decrypt(a.params, a.sk, a.balance)
+	balance, _ := proof.Decrypt(a.params, a.sk, a.balance)
 	a.m = new(big.Int).SetBytes(balance)
 }
 

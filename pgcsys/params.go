@@ -1,6 +1,7 @@
 package pgcsys
 
 import (
+	"math/big"
 	"os"
 
 	"github.com/pgc/curve"
@@ -36,8 +37,8 @@ func DefaultPgcSysParams() PgcSys {
 
 	// only for test
 	priv, err := proof.HexToKey(os.Getenv("GlobalKey"), &arp)
-	if err != nil {
-		panic(err)
+	if err != nil || priv.D.Cmp(big.NewInt(0)) == 0 {
+		panic("Empty GlobalKey")
 	}
 
 	arp.pub = new(utils.ECPoint).SetFromPublicKey(&priv.PublicKey)

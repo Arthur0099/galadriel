@@ -5,6 +5,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 
@@ -200,6 +201,7 @@ func EncryptTransfer(params CTParams, sender, receiver *ecdsa.PublicKey, msg []b
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println(params.Pub().Compress())
 	twAuth, err := EncryptWithRandom(params, params.Pub().ToPublicKey(), msg, r)
 	if err != nil {
 		return nil, err
@@ -276,7 +278,7 @@ func EncryptWithRandom(params CTParams, pk *ecdsa.PublicKey, msg []byte, r *big.
 }
 
 // Decrypt decrypts msg in twisted elgamal way.
-func Decrypt(params CTParams, sk *ecdsa.PrivateKey, ct *CTEncPoint) []byte {
+func Decrypt(params CTParams, sk *ecdsa.PrivateKey, ct *CTEncPoint) ([]byte, error) {
 	encodedMsg := getEncryptedMsg(sk, ct.Copy())
 	return decryptEncodedMsg(params, encodedMsg)
 }
@@ -297,18 +299,23 @@ func getEncryptedMsg(sk *ecdsa.PrivateKey, ct *CTEncPoint) *utils.ECPoint {
 
 // decryptencodedmsg decrypts and returns original bytes of msg.
 // encodeMsg = g * m
-func decryptEncodedMsg(params CTParams, encodeMsg *utils.ECPoint) []byte {
+func decryptEncodedMsg(params CTParams, encodeMsg *utils.ECPoint) ([]byte, error) {
 	g := params.G().Copy()
 
 	// encode zero.
 	if encodeMsg.X.Cmp(utils.Zero) == 0 && encodeMsg.Y.Cmp(utils.Zero) == 0 {
-		return []byte{}
+		return []byte{}, nil
 	}
 	if encodeMsg.Equal(g) {
-		return utils.One.Bytes()
+		return utils.One.Bytes(), nil
 	}
 
-	return ShanksDlog(g, encodeMsg, params.Bitsize(), 7).Bytes()
+	out, err := ShanksDlog(g, encodeMsg, params.Bitsize(), 7)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	return out.Bytes(), nil
 }
 
 // Refresh Ciphertext refreshing algorithm: output a fresh ciphertext for the message encrypted in CT.

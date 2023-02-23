@@ -3,6 +3,7 @@ package curve
 import (
 	"crypto/elliptic"
 	"fmt"
+	"math/big"
 
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -28,6 +29,16 @@ func GetCurve(name string) (elliptic.Curve, error) {
 	switch name {
 	case bn256Name:
 		return BN256(), nil
+
+	default:
+		return nil, fmt.Errorf("Unsupported curve: %s", name)
+	}
+}
+
+func GetCurveA(name string) (*big.Int, error) {
+	switch name {
+	case bn256Name:
+		return bn256CurveA, nil
 
 	default:
 		return nil, fmt.Errorf("Unsupported curve: %s", name)

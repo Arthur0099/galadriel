@@ -3,6 +3,7 @@ package proof
 import (
 	"crypto/elliptic"
 	"encoding/hex"
+	"errors"
 	"io/ioutil"
 	"math/big"
 	"os"
@@ -23,20 +24,19 @@ var point2Index = make(map[string]int, 0)
 
 // BuildAndLoadMapIfNotExist tries to build map if it's not exist.
 // Load map if exist
-func BuildAndLoadMapIfNotExist(g *utils.ECPoint, rangeLen, tunning, roNum int) {
+func BuildAndLoadMapIfNotExist(g *utils.ECPoint, rangeLen, tunning, roNum int) error {
 	if _, err := os.Stat(hashMapFile); os.IsNotExist(err) {
 		log.Info("build hash map, cost about 1 minute")
-		buildHashMap(g, rangeLen, tunning, roNum)
-		return
+		return buildHashMap(g, rangeLen, tunning, roNum)
 	}
-	loadHashMap(rangeLen, tunning)
+	return loadHashMap(rangeLen, tunning)
 }
 
-func buildHashMap(g *utils.ECPoint, rangeLen, tunning, roNum int) {
+func buildHashMap(g *utils.ECPoint, rangeLen, tunning, roNum int) error {
 	giantStepSize := 2 << (rangeLen/2 + tunning - 1)
 
 	if giantStepSize%roNum != 0 {
-		panic("Thread assignment fails")
+		return errors.New("Thread assignment fails")
 	}
 
 	l := giantStepSize / roNum
@@ -57,39 +57,41 @@ func buildHashMap(g *utils.ECPoint, rangeLen, tunning, roNum int) {
 
 	// write to file
 	if err := ioutil.WriteFile(hashMapFile, buffer, 0644); err != nil {
-		panic(err)
+		return err
 	}
 
 	// load data
-	loadHashMap(rangeLen, tunning)
+	return loadHashMap(rangeLen, tunning)
 }
 
-func LoadMap(rangeLen, tunning int) {
-	loadHashMap(rangeLen, tunning)
+func LoadMap(rangeLen, tunning int) error {
+	return loadHashMap(rangeLen, tunning)
 }
 
-func loadHashMap(rangeLen, tunning int) {
+func loadHashMap(rangeLen, tunning int) error {
 	giantStepSize := 2 << (rangeLen/2 + tunning - 1)
 	bytesLen := giantStepSize * Compressed
 
 	// read file
 	bytes, err := ioutil.ReadFile(hashMapFile)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	if bytesLen != len(bytes) {
-		panic("Invalid hash map file bytes len")
+		return errors.New("Invalid hash map file bytes len")
 	}
 
 	for i := 0; i < giantStepSize; i++ {
 		key := hex.EncodeToString(bytes[i*Compressed : (i+1)*Compressed])
 		point2Index[key] = i
 	}
+
+	return nil
 }
 
 // ShanksDlog decrypts point using shanks algorithm.
-func ShanksDlog(g, msg *utils.ECPoint, rangeLen, tunning int) *big.Int {
+func ShanksDlog(g, msg *utils.ECPoint, rangeLen, tunning int) (*big.Int, error) {
 	giantStepSize := 2 << (rangeLen/2 + tunning - 1)
 	loop := 2 << (rangeLen/2 - tunning - 1)
 
@@ -98,7 +100,7 @@ func ShanksDlog(g, msg *utils.ECPoint, rangeLen, tunning int) *big.Int {
 
 	dstPoint := msg.Copy()
 	if giantStepSize != len(point2Index) {
-		panic("Hash map isn't loaded")
+		return nil, errors.New("Hash map isn't loaded")
 	}
 
 	i, j := 0, 0
@@ -116,10 +118,10 @@ func ShanksDlog(g, msg *utils.ECPoint, rangeLen, tunning int) *big.Int {
 	}
 
 	if !find {
-		panic("The DLOG is not found in the specified range")
+		return nil, errors.New("The DLOG is not found in the specified range")
 	}
 
-	return big.NewInt(int64(i + j*giantStepSize))
+	return big.NewInt(int64(i + j*giantStepSize)), nil
 }
 
 func calPoints(start, g *utils.ECPoint, buffer []byte, l, startIndex int) {

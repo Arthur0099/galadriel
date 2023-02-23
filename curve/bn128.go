@@ -13,6 +13,10 @@ const (
 	bn256Name = "BN256"
 )
 
+var (
+	bn256CurveA = big.NewInt(0)
+)
+
 // Marshaler can marshal a point to a big.int.
 type Marshaler interface {
 	Marshal(x, y *big.Int) []byte
