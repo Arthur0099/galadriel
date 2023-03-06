@@ -186,6 +186,11 @@ func (ec *ECPoint) Compress() []byte {
 	return compressed
 }
 
+// MurmurHashToUint64 calcute murmur hash
+func (ec *ECPoint) MurmurHashToUint64() uint64 {
+	return MurmurHash64AWithFixedSalt(ec.Compress())
+}
+
 func DecompressPointBytes(cv elliptic.Curve, data []byte) (*ECPoint, error) {
 	if len(data) != 33 {
 		return nil, errors.New("invalid point len, expect 33")

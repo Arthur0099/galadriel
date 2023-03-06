@@ -1,8 +1,7 @@
 package proof
 
 import (
-	"crypto/elliptic"
-	"encoding/hex"
+	"encoding/binary"
 	"errors"
 	"io/ioutil"
 	"math/big"
@@ -16,11 +15,12 @@ import (
 
 // Global params
 var (
-	Compressed  = 33
-	hashMapFile = filepath.Join(os.Getenv("HOME"), "hashMap")
+	Compressed    = 33
+	uint64ByteLen = 8
+	hashMapFile   = filepath.Join(os.Getenv("HOME"), "hashMap")
 )
 
-var point2Index = make(map[string]int, 0)
+var point2Index = make(map[uint64]int, 0)
 
 // BuildAndLoadMapIfNotExist tries to build map if it's not exist.
 // Load map if exist
@@ -40,7 +40,7 @@ func buildHashMap(g *utils.ECPoint, rangeLen, tunning, roNum int) error {
 	}
 
 	l := giantStepSize / roNum
-	buffer := make([]byte, giantStepSize*Compressed)
+	buffer := make([]byte, giantStepSize*uint64ByteLen)
 
 	wg := sync.WaitGroup{}
 	wg.Add(roNum)
@@ -70,7 +70,7 @@ func LoadMap(rangeLen, tunning int) error {
 
 func loadHashMap(rangeLen, tunning int) error {
 	giantStepSize := 2 << (rangeLen/2 + tunning - 1)
-	bytesLen := giantStepSize * Compressed
+	bytesLen := giantStepSize * uint64ByteLen
 
 	// read file
 	bytes, err := ioutil.ReadFile(hashMapFile)
@@ -83,7 +83,8 @@ func loadHashMap(rangeLen, tunning int) error {
 	}
 
 	for i := 0; i < giantStepSize; i++ {
-		key := hex.EncodeToString(bytes[i*Compressed : (i+1)*Compressed])
+		keyBz := bytes[i*uint64ByteLen : (i+1)*uint64ByteLen]
+		key := binary.LittleEndian.Uint64(keyBz)
 		point2Index[key] = i
 	}
 
@@ -106,7 +107,7 @@ func ShanksDlog(g, msg *utils.ECPoint, rangeLen, tunning int) (*big.Int, error) 
 	i, j := 0, 0
 	find := false
 	for ; j < loop; j++ {
-		msgKey := hex.EncodeToString(elliptic.MarshalCompressed(dstPoint.Curve, dstPoint.X, dstPoint.Y))
+		msgKey := dstPoint.MurmurHashToUint64()
 		r, ok := point2Index[msgKey]
 		if ok {
 			find = true
@@ -126,8 +127,10 @@ func ShanksDlog(g, msg *utils.ECPoint, rangeLen, tunning int) (*big.Int, error) 
 
 func calPoints(start, g *utils.ECPoint, buffer []byte, l, startIndex int) {
 	for i := 0; i < l; i++ {
-		index := (startIndex + i) * Compressed
-		copy(buffer[index:index+Compressed], elliptic.MarshalCompressed(start.Curve, start.X, start.Y))
+		index := (startIndex + i) * uint64ByteLen
+		bz := make([]byte, uint64ByteLen)
+		binary.LittleEndian.PutUint64(bz, start.MurmurHashToUint64())
+		copy(buffer[index:index+uint64ByteLen], bz)
 		start.Add(start, g)
 	}
 }

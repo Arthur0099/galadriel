@@ -1,11 +1,13 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBiggestInt(t *testing.T) {
@@ -35,4 +37,16 @@ func TestBiggestInt(t *testing.T) {
 		actual := BiggestInt(c.size)
 		assert.Equal(t, true, actual.Cmp(c.expect) == 0, fmt.Sprintf("expect %s, actual %s", c.expect, actual))
 	}
+}
+
+func TestMurmurHash64A(t *testing.T) {
+	key := []byte("This is a murmur hash test")
+	another := []byte("This is an murmur hash test")
+
+	toKey := make([]byte, len(key))
+	copy(toKey, key)
+	h := MurmurHash64AWithFixedSalt([]byte(key))
+	require.True(t, bytes.Equal(key, toKey))
+	ah := MurmurHash64AWithFixedSalt([]byte(another))
+	require.True(t, h != ah)
 }

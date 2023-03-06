@@ -4,16 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"fmt"
 	"math/big"
-	"strings"
 	"unicode"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	pgcm "github.com/pgc/contracts/pgc"
 )
 
 var (
@@ -26,8 +23,6 @@ var (
 	Zero  = new(big.Int).SetUint64(0)
 	Ether = new(big.Int).SetUint64(1000 * 1000 * 1000 * 1000 * 1000 * 1000)
 )
-
-var parsed abi.ABI
 
 // ComputeChallengeByECPoints computes challenge like (ecpoint.X, ecpoint.Y, ...).
 func ComputeChallengeByECPoints(order *big.Int, points ...*ECPoint) (*big.Int, error) {
@@ -65,49 +60,6 @@ func ComputeChallenge(order *big.Int, data ...interface{}) (*big.Int, error) {
 // Keccak256 calculates and returns the Keccak256 hash of the input data.
 func Keccak256(data ...[]byte) []byte {
 	return crypto.Keccak256(data...)
-}
-
-// // HashTransfer returns the hash of transfer input.
-// func HashTransfer(tx *transferTx, token common.Address) ([]byte, error) {
-// 	return hash(parsed, "transfer", tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, new(big.Int).SetBytes(token.Bytes()), tx.nonce)
-// }
-
-// // HashBurn returns the hash of burn input.
-// func HashBurn(receiver, token common.Address, tx *burnTx) ([]byte, error) {
-// 	return hash(parsed, "verifyBurnSig", new(big.Int).SetBytes(receiver.Bytes()), new(big.Int).SetBytes(token.Bytes()), tx.amount, tx.pk, tx.proof, tx.z, tx.nonce)
-// }
-
-// // HashBurnPart returns hash of burnPart.
-// func HashBurnPart(receiver, token common.Address, tx *burnPartTx) ([]byte, error) {
-// 	return hash(parsed, "verifyBurnPartSig", new(big.Int).SetBytes(receiver.Bytes()), new(big.Int).SetBytes(token.Bytes()), tx.amount, tx.points, tx.scalar, tx.rpoints, tx.l, tx.r, tx.nonce)
-// }
-
-// // HashOpenPending returns hash of openPending.
-// func HashOpenPending(x, y, epoch, nonce *big.Int) ([]byte, error) {
-// 	return hash(parsed, "openPending", x, y, epoch, nonce)
-// }
-
-// // HashClosePending returns hash of closePending.
-// func HashClosePending(x, y, nonce *big.Int) ([]byte, error) {
-// 	return hash(parsed, "closePending", x, y, nonce)
-// }
-
-func hash(parsedABI abi.ABI, name string, params ...interface{}) ([]byte, error) {
-	method, exist := parsed.Methods[name]
-	if !exist {
-		return nil, fmt.Errorf("method '%s' not found", name)
-	}
-
-	if len(method.Inputs) <= 1 {
-		return nil, fmt.Errorf("no enough inputs for compute hash for '%s", name)
-	}
-	arguments := method.Inputs[0 : len(method.Inputs)-1]
-	data, err := arguments.Pack(params...)
-	if err != nil {
-		return nil, err
-	}
-
-	return Keccak256(data), nil
 }
 
 // Sha256Hash returns hash bytes using sha256.
@@ -294,6 +246,68 @@ func CallOpt() *bind.CallOpts {
 	return &opt
 }
 
-func init() {
-	parsed, _ = abi.JSON(strings.NewReader(pgcm.PgcABI))
+// MurmurHash64AWithFixedSalt calcute murmur hash with fixed salt 0xAAAAAAAA.
+func MurmurHash64AWithFixedSalt(key []byte) (hash uint64) {
+	return MurmurHash64A(key, 0xAAAAAAAA)
+}
+
+// MurmurHash64A compute hash for map look up
+func MurmurHash64A(key []byte, seed uint64) (hash uint64) {
+	const m uint64 = 0xc6a4a7935bd1e995
+	const r = 47
+
+	var l int = len(key)
+	var h uint64 = seed ^ uint64(l)*m
+
+	var data []byte = key
+	var l8 int = l / 8
+
+	var k uint64
+
+	for i := 0; i < l8; i++ {
+		i8 := i * 8
+		k = uint64(data[i8+0]) + uint64(data[i8+1])<<8 +
+			uint64(data[i8+2])<<16 + uint64(data[i8+3])<<24 +
+			uint64(data[i8+4])<<32 + uint64(data[i8+5])<<40 +
+			uint64(data[i8+6])<<48 + uint64(data[i8+7])<<56
+
+		k *= m
+		k ^= k >> r
+		k *= m
+
+		h ^= k
+		h *= m
+	}
+
+	data = data[l8*8:]
+
+	switch l & 7 {
+	case 7:
+		h ^= uint64(data[6]) << 48
+		fallthrough
+	case 6:
+		h ^= uint64(data[5]) << 40
+		fallthrough
+	case 5:
+		h ^= uint64(data[4]) << 32
+		fallthrough
+	case 4:
+		h ^= uint64(data[3]) << 24
+		fallthrough
+	case 3:
+		h ^= uint64(data[2]) << 16
+		fallthrough
+	case 2:
+		h ^= uint64(data[1]) << 8
+		fallthrough
+	case 1:
+		h ^= uint64(data[0])
+		h *= m
+	}
+
+	h ^= h >> r
+	h *= m
+	h ^= h >> r
+
+	return h
 }
